@@ -205,61 +205,34 @@ struct Convert<T, typename std::enable_if_t<IsWrappedClass<T>::value>> {
     }
 };
 
-/*template<typename T>
+template<typename T>
 struct Convert<std::shared_ptr<T>, typename std::enable_if_t<IsWrappedClass<T>::value>> {
-    using CType = T *;
+    using CType = std::shared_ptr<T>;
     using V8Type = v8::Local<v8::Object>;
 
-    static bool IsValid(v8::Isolate *, v8::Local<v8::Value> value) {
+    static bool IsValid(v8::Isolate *isolate, v8::Local<v8::Value> value) {
         if (value.IsEmpty() || !value->IsObject()) {
             return false;
         }
-        return ClassInfo::IsOfType<std::remove_cv_t<T>>(value.As<v8::Object>());
+        try {
+            Class<std::remove_cv_t<T>>::UnwrapObject(isolate, value);
+        } catch (const std::exception &e) {
+            return false;
+        }
+        return true;
     }
 
     static CType FromV8(v8::Isolate *isolate, v8::Local<v8::Value> value) {
         if (!IsValid(isolate, value)) {
             throw std::runtime_error("Value is not a valid object");
         }
-        return Class<std::remove_cv_t<T>, SharedPointerTraits>::UnwrapObject(isolate, value);
+        return SharedPointerManager<std::remove_cv_t<T>>::UnwrapObject(isolate, value);
     }
 
     static V8Type ToV8(v8::Isolate *isolate, CType value) {
-        return Class<std::remove_cv_t<T>, SharedPointerTraits>::FindObject(isolate, value);
+        return SharedPointerManager<std::remove_cv_t<T>>::FindObject(isolate, value);
     }
 };
-
-template<typename T>
-struct Convert<T, SharedPointerTraits> {
-    using CType = T &;
-    using V8Type = v8::Local<v8::Object>;
-
-    static bool IsValid(v8::Isolate *, v8::Local<v8::Value> value) {
-        if (value.IsEmpty() || !value->IsObject()) {
-            return false;
-        }
-        return ClassInfo::IsOfType<std::remove_cv_t<T>>(value.As<v8::Object>());
-    }
-
-    static CType FromV8(v8::Isolate *isolate, v8::Local<v8::Value> value) {
-        if (!IsValid(isolate, value)) {
-            throw std::runtime_error("Value is not a valid object");
-        }
-        auto ptr = Class<std::remove_cv_t<T>, RawPointerTraits>::UnwrapObject(isolate, value);
-        if (!ptr) {
-            throw std::runtime_error("Failed to unwrap object");
-        }
-        return *ptr;
-    }
-
-    static V8Type ToV8(v8::Isolate *isolate, CType value) {
-        auto wrapped = Class<std::remove_cv_t<T>, RawPointerTraits>::FindObject(isolate, value);
-        if (wrapped.IsEmpty()) {
-            throw std::runtime_error("Failed to wrap object");
-        }
-        return wrapped;
-    }
-};*/
 
 
 

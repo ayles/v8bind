@@ -48,25 +48,63 @@ struct FunctionTraits<R (C::*)> {
     using ReturnType = R;
 };
 
-template<typename T>
+struct NonStrict {};
+
+template<typename T, typename Enable = void>
 struct ArgumentTraits;
 
+template<>
+struct ArgumentTraits<std::tuple<>, NonStrict> {
+    template<typename R>
+    static bool IsMatch(const v8::FunctionCallbackInfo<R> &info) {
+        return true;
+    }
+};
+
+template<>
+struct ArgumentTraits<std::tuple<>> {
+    template<typename R>
+    static bool IsMatch(const v8::FunctionCallbackInfo<R> &info) {
+        return info.Length() == 0;
+    }
+};
+
 template<typename A>
-struct ArgumentTraits<std::tuple<A>> {
+struct ArgumentTraits<std::tuple<A>, NonStrict> {
     template<typename R>
     static bool IsMatch(const v8::FunctionCallbackInfo<R> &info, int offset = 0) {
         return Convert<std::decay_t<A>>::IsValid(info.GetIsolate(), info[offset]);
     }
 };
 
+template<typename A>
+struct ArgumentTraits<std::tuple<A>> {
+    template<typename R>
+    static bool IsMatch(const v8::FunctionCallbackInfo<R> &info) {
+        return info.Length() == 1 && ArgumentTraits<std::tuple<A>, NonStrict>::IsMatch(info);
+    }
+};
+
+template<typename A1, typename A2, typename ...A>
+struct ArgumentTraits<std::tuple<A1, A2, A...>, NonStrict> {
+    template<typename R>
+    static bool IsMatch(const v8::FunctionCallbackInfo<R> &info, int offset = 0) {
+        return ArgumentTraits<std::tuple<A1>, NonStrict>::IsMatch(info, offset) &&
+               ArgumentTraits<std::tuple<A2, A...>, NonStrict>::IsMatch(info, offset + 1);
+    }
+};
+
 template<typename A1, typename A2, typename ...A>
 struct ArgumentTraits<std::tuple<A1, A2, A...>> {
     template<typename R>
-    static bool IsMatch(const v8::FunctionCallbackInfo<R> &info, int offset = 0) {
-        return ArgumentTraits<std::tuple<A1>>::IsMatch(info, offset) &&
-               ArgumentTraits<std::tuple<A2, A...>>::IsMatch(info, offset + 1);
+    static bool IsMatch(const v8::FunctionCallbackInfo<R> &info) {
+        return std::tuple_size_v<std::tuple<A1, A2, A...>> == info.Length() &&
+            ArgumentTraits<std::tuple<A1, A2, A...>, NonStrict>::IsMatch(info);
     }
 };
+
+template<typename T>
+using NonStrictArgumentTraits = ArgumentTraits<T, NonStrict>;
 
 }
 }
