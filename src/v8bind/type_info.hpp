@@ -46,9 +46,10 @@ struct TypeInfo {
     using TypeId = size_t;
 #endif
 
-    TypeInfo(const TypeInfo &other) : type_id(other.type_id) {}
+    TypeInfo(const TypeInfo &other, size_t size) : type_id(other.type_id), size(size) {}
     TypeInfo &operator=(const TypeInfo &other) {
         type_id = other.type_id;
+        size = other.size;
         return *this;
     }
 
@@ -76,8 +77,14 @@ struct TypeInfo {
         return type_id != other.type_id;
     }
 
-    TypeId GetTypeId() {
+    [[nodiscard]]
+    TypeId GetTypeId() const {
         return type_id;
+    }
+
+    [[nodiscard]]
+    size_t GetSize() const {
+        return size;
     }
 
 #if defined(RTTI_ENABLED)
@@ -109,6 +116,7 @@ struct TypeInfo {
 
 private:
     TypeId type_id;
+    size_t size;
 
     explicit TypeInfo(TypeId type_id) : type_id(type_id) {}
 

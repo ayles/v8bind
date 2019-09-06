@@ -31,44 +31,6 @@ public:
     }
 };
 
-template<typename T>
-class SharedPointerManager : public PointerManager {
-    std::unordered_map<T *, std::shared_ptr<T>> pointers;
-
-public:
-    static v8::Local<v8::Object> WrapObject(v8::Isolate *isolate, const std::shared_ptr<T> &ptr) {
-        auto &instance = PointerManager::GetInstance<SharedPointerManager>();
-        return Class<T>::WrapObject(isolate, ptr.get(), &instance);
-    }
-
-    static v8::Local<v8::Object> FindObject(v8::Isolate *isolate, const std::shared_ptr<T> &ptr) {
-        auto &instance = PointerManager::GetInstance<SharedPointerManager>();
-        auto object = Class<T>::FindObject(isolate, ptr.get());
-        if (instance.pointers.find(ptr.get()) == instance.pointers.end()) {
-            return Class<T>::SetPointerManager(isolate, ptr.get(), &instance);
-        }
-        return object;
-    }
-
-    static std::shared_ptr<T> UnwrapObject(v8::Isolate *isolate, v8::Local<v8::Value> value) {
-        auto &instance = PointerManager::GetInstance<SharedPointerManager>();
-        auto ptr = Class<T>::UnwrapObject(isolate, value);
-        if (instance.pointers.find(ptr) == instance.pointers.end()) {
-            Class<T>::SetPointerManager(isolate, ptr, &instance);
-        }
-        return instance.pointers.find(ptr)->second;
-    }
-
-protected:
-    void BeginObjectManage(void *ptr) override {
-        pointers.emplace(static_cast<T *>(ptr), std::shared_ptr<T>(static_cast<T *>(ptr)));
-    }
-
-    void EndObjectManage(void *ptr) override {
-        pointers.erase(static_cast<T *>(ptr));
-    }
-};
-
 class ClassManager : public PointerManager {
 public:
     const TypeInfo type_info;
@@ -91,14 +53,17 @@ public:
     void RemoveObjects();
 
     v8::Local<v8::Object> FindObject(void *ptr) const;
-    v8::Local<v8::Object> SetPointerManager(void *ptr, PointerManager *pointer_manager);
     v8::Local<v8::Object> WrapObject(void *ptr);
     v8::Local<v8::Object> WrapObject(void *ptr, PointerManager *pointer_manager);
+    void SetPointerManager(void *ptr, PointerManager *pointer_manager);
 
     void *UnwrapObject(v8::Local<v8::Value> value);
 
     [[nodiscard]]
     v8::Local<v8::FunctionTemplate> GetFunctionTemplate() const;
+
+    void SetBase(const TypeInfo &type_info,
+            void *(*base_to_this)(void *), void *(*this_to_base)(void *));
 
     void SetConstructor(ConstructorFunction constructor_function);
     void SetDestructor(DestructorFunction destructor_function);
@@ -127,6 +92,7 @@ private:
         PointerManager *pointer_manager;
     };
 
+    WrappedObject &FindWrappedObject(void *ptr, void **base_ptr_ptr = nullptr) const;
     void ResetObject(WrappedObject &object);
 
     std::unordered_map<void *, WrappedObject> objects;
@@ -136,6 +102,16 @@ private:
 
     ConstructorFunction constructor_function;
     DestructorFunction destructor_function;
+
+    struct BaseClassInfo {
+        ClassManager *base_class_manager = nullptr;
+        void *(*base_to_this)(void *) = nullptr;
+        void *(*this_to_base)(void *) = nullptr;
+    };
+
+    BaseClassInfo base_class_info;
+    std::vector<ClassManager *> derived_class_managers;
+
     bool auto_wrap;
     bool pointer_auto_wrap;
 };
@@ -167,6 +143,9 @@ class Class {
 public:
     explicit Class(v8::Isolate *isolate);
 
+    template<typename B>
+    Class &Inherit();
+
     template<typename ...Args>
     Class &Constructor();
 
@@ -181,13 +160,49 @@ public:
     static T *UnwrapObject(v8::Isolate *isolate, v8::Local<v8::Value> value);
     static v8::Local<v8::Object> WrapObject(v8::Isolate *isolate, T *ptr, bool take_ownership);
     static v8::Local<v8::Object> WrapObject(v8::Isolate *isolate, T *ptr, PointerManager *pointer_manager);
-    static v8::Local<v8::Object> SetPointerManager(v8::Isolate *isolate, T *ptr, PointerManager *pointerManager);
     static v8::Local<v8::Object> FindObject(v8::Isolate *isolate, T *ptr);
     static v8::Local<v8::Object> FindObject(v8::Isolate *isolate, const T &obj);
+    static void SetPointerManager(v8::Isolate *isolate, T *ptr, PointerManager *pointerManager);
+};
+
+template<typename T>
+class SharedPointerManager : public PointerManager {
+    std::unordered_map<T *, std::shared_ptr<T>> pointers;
+
+public:
+    static v8::Local<v8::Object> WrapObject(v8::Isolate *isolate, const std::shared_ptr<T> &ptr) {
+        auto &instance = PointerManager::GetInstance<SharedPointerManager>();
+        return Class<T>::WrapObject(isolate, ptr.get(), &instance);
+    }
+
+    static v8::Local<v8::Object> FindObject(v8::Isolate *isolate, const std::shared_ptr<T> &ptr) {
+        auto &instance = PointerManager::GetInstance<SharedPointerManager>();
+        auto object = Class<T>::FindObject(isolate, ptr.get());
+        if (instance.pointers.find(ptr.get()) == instance.pointers.end()) {
+            Class<T>::SetPointerManager(isolate, ptr.get(), &instance);
+        }
+        return object;
+    }
+
+    static std::shared_ptr<T> UnwrapObject(v8::Isolate *isolate, v8::Local<v8::Value> value) {
+        auto &instance = PointerManager::GetInstance<SharedPointerManager>();
+        auto ptr = Class<T>::UnwrapObject(isolate, value);
+        if (instance.pointers.find(ptr) == instance.pointers.end()) {
+            Class<T>::SetPointerManager(isolate, ptr, &instance);
+        }
+        return instance.pointers.find(ptr)->second;
+    }
+
+protected:
+    void BeginObjectManage(void *ptr) override {
+        pointers.emplace(static_cast<T *>(ptr), std::shared_ptr<T>(static_cast<T *>(ptr)));
+    }
+
+    void EndObjectManage(void *ptr) override {
+        pointers.erase(static_cast<T *>(ptr));
+    }
 };
 
 }
 
 #endif //SANDWICH_V8B_CLASS_HPP
-
-#include <v8bind/class.ipp>

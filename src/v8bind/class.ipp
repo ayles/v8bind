@@ -16,7 +16,8 @@
 namespace v8b {
 
 ClassManager::ClassManager(v8::Isolate *isolate, const v8b::TypeInfo &type_info)
-        : type_info(type_info), isolate(isolate), auto_wrap(false), pointer_auto_wrap(false) {
+        : type_info(type_info), isolate(isolate), auto_wrap(false),
+        pointer_auto_wrap(false), constructor_function(nullptr), destructor_function(nullptr) {
     v8::HandleScope scope(isolate);
 
     auto f = v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &args) {
@@ -57,29 +58,58 @@ void ClassManager::RemoveObjects() {
     objects.clear();
 }
 
+ClassManager::WrappedObject &ClassManager::FindWrappedObject(void *ptr, void **base_ptr_ptr) const {
+    // TODO
+    auto it = objects.find(ptr);
+    if (it == objects.end()) {
+        for (ClassManager *derived : derived_class_managers) {
+            try {
+                if (base_ptr_ptr) {
+                    auto &o = derived->FindWrappedObject(ptr, base_ptr_ptr);
+                    *base_ptr_ptr = derived->base_class_info.this_to_base(*base_ptr_ptr);
+                    return o;
+                } else {
+                    // Downcast only if ptr is base ptr, else return upcasted base_ptr in
+                    // base_ptr_ptr
+                    return derived->FindWrappedObject(derived->base_class_info.base_to_this(ptr));
+                }
+            } catch (const std::exception &) {
+                continue;
+            }
+        }
+        throw std::runtime_error("Can't find wrapped object");
+    }
+    if (base_ptr_ptr) {
+        *base_ptr_ptr = ptr;
+    }
+    return const_cast<WrappedObject &>(it->second);
+}
+
 void ClassManager::ResetObject(WrappedObject &object) {
     if (object.pointer_manager) {
         object.pointer_manager->EndObjectManage(object.ptr);
     }
     object.wrapped_object.Reset();
+    isolate->AdjustAmountOfExternalAllocatedMemory(-static_cast<int64_t>(type_info.GetSize()));
 }
 
 v8::Local<v8::Object> ClassManager::FindObject(void *ptr) const {
-    auto it = objects.find(ptr);
-    if (it == objects.end()) {
-        throw std::runtime_error("Can't find wrapped object");
-    }
-    return it->second.wrapped_object.Get(isolate);
+    return FindWrappedObject(ptr).wrapped_object.Get(isolate);
 }
 
-v8::Local<v8::Object> ClassManager::SetPointerManager(void *ptr, PointerManager *pointer_manager) {
+void ClassManager::SetPointerManager(void *ptr, PointerManager *pointer_manager) {
     if (pointer_manager == nullptr) {
         throw std::runtime_error("Can't set nullptr as pointer manager");
     }
 
     auto it = objects.find(ptr);
     if (it == objects.end()) {
-        throw std::runtime_error("Can't find object");
+        try {
+            FindWrappedObject(ptr);
+        } catch (const std::exception &) {
+            throw std::runtime_error("Can't find object");
+        }
+        throw std::runtime_error("Setting pointer manager for object through his base is not allowed");
     }
 
     if (it->second.pointer_manager != nullptr && it->second.pointer_manager != this) {
@@ -88,8 +118,6 @@ v8::Local<v8::Object> ClassManager::SetPointerManager(void *ptr, PointerManager 
 
     it->second.pointer_manager = pointer_manager;
     pointer_manager->BeginObjectManage(ptr);
-
-    return it->second.wrapped_object.Get(isolate);
 }
 
 v8::Local<v8::Object> ClassManager::WrapObject(void *ptr) {
@@ -101,12 +129,18 @@ v8::Local<v8::Object> ClassManager::WrapObject(void *ptr, PointerManager *pointe
         return v8::Local<v8::Object>();
     }
 
-    auto it = objects.find(ptr);
-    if (it != objects.end()) {
+    v8::EscapableHandleScope scope(isolate);
+
+    bool found = false;
+    try {
+        FindWrappedObject(ptr);
+        found = true;
+    } catch (const std::exception &) {
+        // Object not find, it's all ok
+    }
+    if (found) {
         throw std::runtime_error("Object is already wrapped");
     }
-
-    v8::EscapableHandleScope scope(isolate);
 
     auto context = isolate->GetCurrentContext();
     auto wrapped = function_template.Get(isolate)
@@ -127,6 +161,8 @@ v8::Local<v8::Object> ClassManager::WrapObject(void *ptr, PointerManager *pointe
         std::move(global),
         pointer_manager
     });
+
+    isolate->AdjustAmountOfExternalAllocatedMemory(static_cast<int64_t>(type_info.GetSize()));
 
     if (pointer_manager != nullptr) {
         pointer_manager->BeginObjectManage(ptr);
@@ -149,18 +185,28 @@ void *ClassManager::UnwrapObject(v8::Local<v8::Value> value) {
     }
 
     void *ptr = obj->GetAlignedPointerFromInternalField(0);
-    auto self = static_cast<ClassManager *>(obj->GetAlignedPointerFromInternalField(1));
 
-    auto it = self->objects.find(ptr);
-    if (it == self->objects.end()) {
-        throw std::runtime_error("Can't find object");
-    }
+    void *base_ptr = nullptr;
+    auto &wrapped_object = FindWrappedObject(ptr, &base_ptr);
 
-    return it->second.ptr;
+    return base_ptr;
 }
 
 v8::Local<v8::FunctionTemplate> ClassManager::GetFunctionTemplate() const {
     return function_template.Get(isolate);
+}
+
+void ClassManager::SetBase(const v8b::TypeInfo &type_info,
+        void *(*base_to_this)(void *), void *(*this_to_base)(void *)) {
+    base_class_info = BaseClassInfo {
+        &ClassManagerPool::Get(isolate, type_info),
+        base_to_this,
+        this_to_base
+    };
+    base_class_info.base_class_manager->derived_class_managers.emplace_back(this);
+    function_template.Get(isolate)->Inherit(
+            base_class_info.base_class_manager->function_template.Get(
+            base_class_info.base_class_manager->isolate));
 }
 
 void ClassManager::SetConstructor(ConstructorFunction constructor_function) {
@@ -250,7 +296,6 @@ void *Class<T>::ObjectCreate(const v8::FunctionCallbackInfo<v8::Value> &args) {
     if (!obj) {
         throw std::runtime_error("No suitable constructor found");
     }
-    args.GetIsolate()->AdjustAmountOfExternalAllocatedMemory(static_cast<int64_t>(sizeof(T)));
     return obj;
 }
 
@@ -258,13 +303,28 @@ template<typename T>
 void Class<T>::ObjectDestroy(v8::Isolate *isolate, void *ptr) {
     auto obj = static_cast<T *>(ptr);
     delete obj;
-    isolate->AdjustAmountOfExternalAllocatedMemory(-static_cast<int64_t>(sizeof(T)));
 }
 
 template<typename T>
 Class<T>::Class(v8::Isolate *isolate)
         : class_manager(ClassManagerPool::Get(isolate, TypeInfo::Get<T>())) {
     class_manager.SetDestructor(ObjectDestroy);
+}
+
+template<typename T>
+template<typename B>
+Class<T> &Class<T>::Inherit() {
+    static_assert(std::is_base_of_v<B, T>,
+            "Class B should be base for class T");
+    class_manager.SetBase(TypeInfo::Get<B>(),
+            [](void *base_ptr) -> void * {
+                return static_cast<void *>(static_cast<T *>(static_cast<B *>(base_ptr)));
+            },
+            [](void *this_ptr) -> void * {
+                return static_cast<void *>(static_cast<B *>(static_cast<T *>(this_ptr)));
+            }
+    );
+    return *this;
 }
 
 template<typename T>
@@ -288,7 +348,7 @@ Class<T> &Class<T>::Var(const std::string &name, Member ptr) {
 
     class_manager.GetFunctionTemplate()->PrototypeTemplate()->SetAccessor(
             ToV8(class_manager.GetIsolate(), name),
-            [](Local<String> property, const v8::PropertyCallbackInfo<Value>& info) {
+            [](v8::Local<v8::String> property, const v8::PropertyCallbackInfo<v8::Value>& info) {
                 try {
                     auto obj = UnwrapObject(info.GetIsolate(), info.This());
                     auto member = ExternalData::Unwrap<MemberPointer>(info.Data());
@@ -297,12 +357,12 @@ Class<T> &Class<T>::Var(const std::string &name, Member ptr) {
                     info.GetIsolate()->ThrowException(v8::Exception::Error(v8_str(e.what())));
                 }
             },
-            [](Local<String> property, Local<Value> value,
+            [](v8::Local<v8::String> property, v8::Local<v8::Value> value,
                     const v8::PropertyCallbackInfo<void>& info) {
                 try {
                     auto obj = UnwrapObject(info.GetIsolate(), info.This());
                     auto member = ExternalData::Unwrap<MemberPointer>(info.Data());
-                    (*obj).*member = FromV8<MemberTrait::ReturnType>(info.GetIsolate(), value);
+                    (*obj).*member = FromV8<typename MemberTrait::ReturnType>(info.GetIsolate(), value);
                 } catch (const std::exception &e) {
                     info.GetIsolate()->ThrowException(v8::Exception::Error(v8_str(e.what())));
                 }
@@ -338,7 +398,7 @@ T *Class<T>::UnwrapObject(v8::Isolate *isolate, v8::Local<v8::Value> value) {
 template<typename T>
 v8::Local<v8::Object> Class<T>::WrapObject(v8::Isolate *isolate, T *ptr, bool take_ownership) {
     if (!take_ownership) {
-        return ClassManagerPool::Get(isolate, TypeInfo::Get<T>()).WrapObject(ptr, nullptr)
+        return ClassManagerPool::Get(isolate, TypeInfo::Get<T>()).WrapObject(ptr, nullptr);
     }
     return ClassManagerPool::Get(isolate, TypeInfo::Get<T>()).WrapObject(ptr);
 }
@@ -349,8 +409,8 @@ v8::Local<v8::Object> Class<T>::WrapObject(v8::Isolate *isolate, T *ptr, Pointer
 }
 
 template<typename T>
-v8::Local<v8::Object> Class<T>::SetPointerManager(v8::Isolate *isolate, T *ptr, PointerManager *pointer_manager) {
-    return ClassManagerPool::Get(isolate, TypeInfo::Get<T>()).SetPointerManager(ptr, pointer_manager);
+void Class<T>::SetPointerManager(v8::Isolate *isolate, T *ptr, PointerManager *pointer_manager) {
+    ClassManagerPool::Get(isolate, TypeInfo::Get<T>()).SetPointerManager(ptr, pointer_manager);
 }
 
 template<typename T>
@@ -382,9 +442,7 @@ v8::Local<v8::Object> Class<T>::FindObject(v8::Isolate *isolate, T *ptr) {
         if (!class_manager.IsPointerAutoWrapEnabled()) {
             throw e;
         }
-        // Do not manage auto wrapped pointers
-        // They later can be managed with PointerManager
-        return class_manager.WrapObject(ptr, nullptr);
+        return class_manager.WrapObject(ptr);
     }
 }
 

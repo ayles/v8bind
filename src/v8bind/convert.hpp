@@ -5,6 +5,8 @@
 #ifndef SANDWICH_V8B_CONVERT_HPP
 #define SANDWICH_V8B_CONVERT_HPP
 
+#include <v8bind/class.hpp>
+
 #include <v8.h>
 
 #include <type_traits>
