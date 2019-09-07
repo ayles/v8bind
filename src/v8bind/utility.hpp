@@ -35,10 +35,24 @@ struct FunctionTraits<R (&)(Args...)> : FunctionTraits<R(Args...)> {
 
 // member function pointer
 template<typename C, typename R, typename ...Args>
-struct FunctionTraits<R (C::*)(Args...)> : FunctionTraits<R(C &, Args...)> {
+struct FunctionTraits<R (C::*)(Args...)> : FunctionTraits<R(Args...)> {
     using ClassType = C;
     using PointerType = R (C::*)(Args...);
 };
+
+// member function pointer reference
+template<typename C, typename R, typename ...Args>
+struct FunctionTraits<R (C::*&)(Args...)> : FunctionTraits<R(C::*)(Args...)> {};
+
+// const member function pointer
+template<typename C, typename R, typename ...Args>
+struct FunctionTraits<R (C::*)(Args...) const> : FunctionTraits<R(C::*)(Args...)> {};
+
+// const member function pointer reference
+template<typename C, typename R, typename ...Args>
+struct FunctionTraits<R (C::*&)(Args...) const> : FunctionTraits<R(C::*)(Args...)> {};
+
+
 
 // member object pointer
 template<typename C, typename R>
@@ -105,6 +119,17 @@ struct ArgumentTraits<std::tuple<A1, A2, A...>> {
 
 template<typename T>
 using NonStrictArgumentTraits = ArgumentTraits<T, NonStrict>;
+
+
+template<typename ...Args>
+constexpr bool And(Args&&... a) {
+    return (a && ...);
+}
+
+template<typename ...Args>
+constexpr bool Or(Args&&... a) {
+    return (a && ...);
+}
 
 }
 }

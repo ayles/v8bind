@@ -292,11 +292,7 @@ void ClassManagerPool::RemoveInstance(v8::Isolate *isolate) {
 template<typename T>
 template<typename... Args>
 void *Class<T>::ObjectCreate(const v8::FunctionCallbackInfo<v8::Value> &args) {
-    auto obj = CallConstructor<T, Args...>(args);
-    if (!obj) {
-        throw std::runtime_error("No suitable constructor found");
-    }
-    return obj;
+    return CallConstructor<T, Args...>(args);
 }
 
 template<typename T>
@@ -336,39 +332,51 @@ Class<T> &Class<T>::Constructor() {
 
 template<typename T>
 template<typename Member>
-Class<T> &Class<T>::Var(const std::string &name, Member ptr) {
+Class<T> &Class<T>::Var(const std::string &name, Member &&ptr) {
     static_assert(std::is_member_object_pointer_v<Member>,
                   "Ptr must be pointer to member data");
 
     v8::HandleScope scope(class_manager.GetIsolate());
 
     using MemberTrait = typename utility::FunctionTraits<Member>;
-    using MemberPointer = typename MemberTrait::PointerType;
-    MemberPointer member = ptr;
 
     class_manager.GetFunctionTemplate()->PrototypeTemplate()->SetAccessor(
             ToV8(class_manager.GetIsolate(), name),
-            [](v8::Local<v8::String> property, const v8::PropertyCallbackInfo<v8::Value>& info) {
+            [](v8::Local<v8::String> property, const v8::PropertyCallbackInfo<v8::Value> &info) {
                 try {
                     auto obj = UnwrapObject(info.GetIsolate(), info.This());
-                    auto member = ExternalData::Unwrap<MemberPointer>(info.Data());
+                    auto member = ExternalData::Unwrap<Member>(info.Data());
                     info.GetReturnValue().Set(ToV8(info.GetIsolate(), (*obj).*member));
                 } catch (const std::exception &e) {
                     info.GetIsolate()->ThrowException(v8::Exception::Error(v8_str(e.what())));
                 }
             },
             [](v8::Local<v8::String> property, v8::Local<v8::Value> value,
-                    const v8::PropertyCallbackInfo<void>& info) {
+                    const v8::PropertyCallbackInfo<void> &info) {
                 try {
                     auto obj = UnwrapObject(info.GetIsolate(), info.This());
-                    auto member = ExternalData::Unwrap<MemberPointer>(info.Data());
+                    auto member = ExternalData::Unwrap<Member>(info.Data());
                     (*obj).*member = FromV8<typename MemberTrait::ReturnType>(info.GetIsolate(), value);
                 } catch (const std::exception &e) {
                     info.GetIsolate()->ThrowException(v8::Exception::Error(v8_str(e.what())));
                 }
             },
-            ExternalData::New(class_manager.GetIsolate(), member)
+            ExternalData::New(class_manager.GetIsolate(), std::forward<Member>(ptr))
     );
+
+    return *this;
+}
+
+template<typename T>
+template<typename ...F>
+Class<T> &Class<T>::Function(const std::string &name, F&&... f) {
+    static_assert(utility::And(std::is_member_function_pointer_v<F>...),
+                  "All f's must be pointers to member functions");
+
+    v8::HandleScope scope(class_manager.GetIsolate());
+
+    class_manager.GetFunctionTemplate()->PrototypeTemplate()->Set(v8_str(name.c_str()),
+            WrapFunction(class_manager.GetIsolate(), std::forward<F>(f)...));
 
     return *this;
 }

@@ -150,7 +150,10 @@ public:
     Class &Constructor();
 
     template<typename Member>
-    Class &Var(const std::string &name, Member ptr);
+    Class &Var(const std::string &name, Member &&ptr);
+
+    template<typename ...F>
+    Class &Function(const std::string &name, F&&... f);
 
     Class &AutoWrap(bool auto_wrap = true);
     Class &PointerAutoWrap(bool auto_wrap = true);
