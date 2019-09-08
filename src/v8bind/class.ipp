@@ -340,28 +340,39 @@ Class<T> &Class<T>::Var(const std::string &name, Member &&ptr) {
 
     using MemberTrait = typename utility::FunctionTraits<Member>;
 
+    v8::AccessorGetterCallback getter = [](v8::Local<v8::String> property, const v8::PropertyCallbackInfo<v8::Value> &info) {
+        try {
+            auto obj = UnwrapObject(info.GetIsolate(), info.This());
+            auto member = ExternalData::Unwrap<Member>(info.Data());
+            info.GetReturnValue().Set(ToV8(info.GetIsolate(), (*obj).*member));
+        } catch (const std::exception &e) {
+            info.GetIsolate()->ThrowException(v8::Exception::Error(v8_str(e.what())));
+        }
+    };
+
+    v8::AccessorSetterCallback setter = nullptr;
+    auto attribute = v8::PropertyAttribute(v8::DontDelete | v8::ReadOnly);
+    if constexpr (!std::is_const_v<typename MemberTrait::ReturnType>) {
+        setter = [](v8::Local<v8::String> property, v8::Local<v8::Value> value,
+           const v8::PropertyCallbackInfo<void> &info) {
+            try {
+                auto obj = UnwrapObject(info.GetIsolate(), info.This());
+                auto member = ExternalData::Unwrap<Member>(info.Data());
+                (*obj).*member = FromV8<typename MemberTrait::ReturnType>(info.GetIsolate(), value);
+            } catch (const std::exception &e) {
+                info.GetIsolate()->ThrowException(v8::Exception::Error(v8_str(e.what())));
+            }
+        };
+        attribute = v8::DontDelete;
+    }
+
     class_manager.GetFunctionTemplate()->PrototypeTemplate()->SetAccessor(
             ToV8(class_manager.GetIsolate(), name),
-            [](v8::Local<v8::String> property, const v8::PropertyCallbackInfo<v8::Value> &info) {
-                try {
-                    auto obj = UnwrapObject(info.GetIsolate(), info.This());
-                    auto member = ExternalData::Unwrap<Member>(info.Data());
-                    info.GetReturnValue().Set(ToV8(info.GetIsolate(), (*obj).*member));
-                } catch (const std::exception &e) {
-                    info.GetIsolate()->ThrowException(v8::Exception::Error(v8_str(e.what())));
-                }
-            },
-            [](v8::Local<v8::String> property, v8::Local<v8::Value> value,
-                    const v8::PropertyCallbackInfo<void> &info) {
-                try {
-                    auto obj = UnwrapObject(info.GetIsolate(), info.This());
-                    auto member = ExternalData::Unwrap<Member>(info.Data());
-                    (*obj).*member = FromV8<typename MemberTrait::ReturnType>(info.GetIsolate(), value);
-                } catch (const std::exception &e) {
-                    info.GetIsolate()->ThrowException(v8::Exception::Error(v8_str(e.what())));
-                }
-            },
-            ExternalData::New(class_manager.GetIsolate(), std::forward<Member>(ptr))
+            getter,
+            setter,
+            ExternalData::New(class_manager.GetIsolate(), std::forward<Member>(ptr)),
+            v8::AccessControl::DEFAULT,
+            attribute
     );
 
     return *this;
@@ -375,8 +386,129 @@ Class<T> &Class<T>::Function(const std::string &name, F&&... f) {
 
     v8::HandleScope scope(class_manager.GetIsolate());
 
-    class_manager.GetFunctionTemplate()->PrototypeTemplate()->Set(v8_str(name.c_str()),
+    class_manager.GetFunctionTemplate()->PrototypeTemplate()->Set(ToV8(class_manager.GetIsolate(), name),
             WrapFunction(class_manager.GetIsolate(), std::forward<F>(f)...));
+
+    return *this;
+}
+
+template<typename T>
+template<typename Getter, typename Setter>
+Class<T> &Class<T>::Property(const std::string &name, Getter &&get, Setter &&set) {
+    using GetterTrait = typename utility::FunctionTraits<Getter>;
+    using SetterTrait = typename utility::FunctionTraits<Setter>;
+
+    static_assert(std::is_member_function_pointer_v<Getter>,
+            "Getter must be pointer to member function");
+    static_assert(std::tuple_size_v<typename GetterTrait::Arguments> == 0,
+            "Getter function must have no arguments");
+    static_assert(std::is_same_v<Setter, nullptr_t> || std::is_member_function_pointer_v<Setter>,
+                  "Setter must be pointer to member function");
+    static_assert(std::is_same_v<Setter, nullptr_t> || std::tuple_size_v<typename SetterTrait::Arguments> == 1,
+                  "Getter function must have 1 argument");
+
+    v8::HandleScope scope(class_manager.GetIsolate());
+
+    std::tuple accessors(std::forward<Getter>(get), std::forward<Setter>(set));
+
+    v8::AccessorGetterCallback getter = [](v8::Local<v8::String> property,
+            const v8::PropertyCallbackInfo<v8::Value> &info) {
+        try {
+            auto obj = UnwrapObject(info.GetIsolate(), info.This());
+            auto acc = ExternalData::Unwrap<decltype(accessors)>(info.Data());
+            info.GetReturnValue().Set(ToV8(info.GetIsolate(), ((*obj).*(std::get<0>(acc)))()));
+        } catch (const std::exception &e) {
+            info.GetIsolate()->ThrowException(v8::Exception::Error(v8_str(e.what())));
+        }
+    };
+
+    v8::AccessorSetterCallback setter = nullptr;
+    auto attribute = v8::PropertyAttribute(v8::DontDelete | v8::ReadOnly);
+    if constexpr (!std::is_same_v<Setter, nullptr_t>) {
+        if (set != nullptr) {
+            setter = [](v8::Local<v8::String> property, v8::Local<v8::Value> value,
+               const v8::PropertyCallbackInfo<void> &info) {
+                try {
+                    auto obj = UnwrapObject(info.GetIsolate(), info.This());
+                    auto acc = ExternalData::Unwrap<decltype(accessors)>(info.Data());
+                    ((*obj).*(std::get<1>(acc)))(FromV8<std::tuple_element_t<0, typename SetterTrait::Arguments>>(info.GetIsolate(), value));
+                } catch (const std::exception &e) {
+                    info.GetIsolate()->ThrowException(v8::Exception::Error(v8_str(e.what())));
+                }
+            };
+            attribute = v8::DontDelete;
+        }
+    }
+
+    class_manager.GetFunctionTemplate()->PrototypeTemplate()->SetAccessor(
+            ToV8(class_manager.GetIsolate(), name),
+            getter,
+            setter,
+            ExternalData::New(class_manager.GetIsolate(), std::move(accessors)),
+            v8::AccessControl::DEFAULT,
+            attribute
+    );
+
+    return *this;
+}
+
+template<typename T>
+template<typename Getter, typename Setter>
+Class<T> &Class<T>::Indexer(Getter &&get, Setter &&set) {
+    using GetterTrait = typename utility::FunctionTraits<Getter>;
+    using SetterTrait = typename utility::FunctionTraits<Setter>;
+
+    static_assert(std::is_member_function_pointer_v<Getter>,
+                  "Getter must be pointer to member function");
+    static_assert(std::tuple_size_v<typename GetterTrait::Arguments> == 1 &&
+                  std::is_integral_v<std::tuple_element_t<0, typename GetterTrait::Arguments>>,
+                  "Getter function must have one integral argument");
+    static_assert(std::is_same_v<Setter, nullptr_t> || std::is_member_function_pointer_v<Setter>,
+                  "Setter must be pointer to member function");
+    static_assert(std::is_same_v<Setter, nullptr_t> ||
+                  (std::tuple_size_v<typename SetterTrait::Arguments> == 2 &&
+                  std::is_integral_v<std::tuple_element_t<0, typename GetterTrait::Arguments>>),
+                  "Setter function must have 2 arguments with first integral");
+
+    v8::HandleScope scope(class_manager.GetIsolate());
+
+    std::tuple accessors(std::forward<Getter>(get), std::forward<Setter>(set));
+
+    v8::IndexedPropertyGetterCallback getter = [](uint32_t index,
+       const v8::PropertyCallbackInfo<v8::Value> &info) {
+        try {
+            auto obj = UnwrapObject(info.GetIsolate(), info.This());
+            auto acc = ExternalData::Unwrap<decltype(accessors)>(info.Data());
+            info.GetReturnValue().Set(ToV8(info.GetIsolate(), ((*obj).*(std::get<0>(acc)))(index)));
+        } catch (const std::exception &e) {
+            info.GetIsolate()->ThrowException(v8::Exception::Error(v8_str(e.what())));
+        }
+    };
+
+    v8::IndexedPropertySetterCallback setter = nullptr;
+    if constexpr (!std::is_same_v<Setter, nullptr_t>) {
+        if (set != nullptr) {
+            setter = [](uint32_t index, v8::Local<v8::Value> value,
+                const v8::PropertyCallbackInfo<v8::Value> &info) {
+                try {
+                    auto obj = UnwrapObject(info.GetIsolate(), info.This());
+                    auto acc = ExternalData::Unwrap<decltype(accessors)>(info.Data());
+                    ((*obj).*(std::get<1>(acc)))(index, FromV8<std::tuple_element_t<0, typename SetterTrait::Arguments>>(info.GetIsolate(), value));
+                } catch (const std::exception &e) {
+                    info.GetIsolate()->ThrowException(v8::Exception::Error(v8_str(e.what())));
+                }
+            };
+        }
+    }
+
+    class_manager.GetFunctionTemplate()->InstanceTemplate()->SetIndexedPropertyHandler(
+            getter,
+            setter,
+            nullptr,
+            nullptr,
+            nullptr,
+            ExternalData::New(class_manager.GetIsolate(), std::move(accessors))
+    );
 
     return *this;
 }

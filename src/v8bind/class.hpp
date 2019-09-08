@@ -152,6 +152,12 @@ public:
     template<typename Member>
     Class &Var(const std::string &name, Member &&ptr);
 
+    template<typename Getter, typename Setter = nullptr_t>
+    Class &Property(const std::string &name, Getter &&getter, Setter &&setter = nullptr);
+
+    template<typename Getter, typename Setter = nullptr_t>
+    Class &Indexer(Getter &&getter, Setter &&setter = nullptr);
+
     template<typename ...F>
     Class &Function(const std::string &name, F&&... f);
 
