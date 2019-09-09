@@ -176,15 +176,7 @@ struct Convert<T, typename std::enable_if_t<IsWrappedClass<T>::value>> {
     using V8Type = v8::Local<v8::Object>;
 
     static bool IsValid(v8::Isolate *isolate, v8::Local<v8::Value> value) {
-        if (value.IsEmpty() || !value->IsObject()) {
-            return false;
-        }
-        try {
-            Class<std::remove_cv_t<T>>::UnwrapObject(isolate, value);
-        } catch (const std::exception &e) {
-            return false;
-        }
-        return true;
+        return Convert<T *>::IsValid(isolate, value);
     }
 
     static CType FromV8(v8::Isolate *isolate, v8::Local<v8::Value> value) {
@@ -213,15 +205,7 @@ struct Convert<std::shared_ptr<T>, typename std::enable_if_t<IsWrappedClass<T>::
     using V8Type = v8::Local<v8::Object>;
 
     static bool IsValid(v8::Isolate *isolate, v8::Local<v8::Value> value) {
-        if (value.IsEmpty() || !value->IsObject()) {
-            return false;
-        }
-        try {
-            Class<std::remove_cv_t<T>>::UnwrapObject(isolate, value);
-        } catch (const std::exception &e) {
-            return false;
-        }
-        return true;
+        return Convert<T>::IsValid(isolate, value);
     }
 
     static CType FromV8(v8::Isolate *isolate, v8::Local<v8::Value> value) {

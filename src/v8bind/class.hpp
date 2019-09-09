@@ -20,7 +20,6 @@ public:
     friend class ClassManager;
 
 protected:
-    virtual void BeginObjectManage(void *ptr) = 0;
     virtual void EndObjectManage(void *ptr) = 0;
 
 public:
@@ -81,8 +80,6 @@ public:
     [[nodiscard]]
     v8::Isolate *GetIsolate() const;
 
-    //
-    void BeginObjectManage(void *ptr) override;
     void EndObjectManage(void *ptr) override;
 
 private:
@@ -152,14 +149,20 @@ public:
     template<typename Member>
     Class &Var(const std::string &name, Member &&ptr);
 
-    template<typename Getter, typename Setter = nullptr_t>
+    template<typename Getter, typename Setter = std::nullptr_t>
     Class &Property(const std::string &name, Getter &&getter, Setter &&setter = nullptr);
 
-    template<typename Getter, typename Setter = nullptr_t>
+    template<typename Getter, typename Setter = std::nullptr_t>
     Class &Indexer(Getter &&getter, Setter &&setter = nullptr);
 
     template<typename ...F>
     Class &Function(const std::string &name, F&&... f);
+
+    template<typename ...F>
+    Class &StaticFunction(const std::string &name, F&&... f);
+
+    template<typename V>
+    Class &StaticVar(const std::string &name, V &&v);
 
     Class &AutoWrap(bool auto_wrap = true);
     Class &PointerAutoWrap(bool auto_wrap = true);
@@ -181,7 +184,9 @@ class SharedPointerManager : public PointerManager {
 public:
     static v8::Local<v8::Object> WrapObject(v8::Isolate *isolate, const std::shared_ptr<T> &ptr) {
         auto &instance = PointerManager::GetInstance<SharedPointerManager>();
-        return Class<T>::WrapObject(isolate, ptr.get(), &instance);
+        auto res = Class<T>::WrapObject(isolate, ptr.get(), &instance);
+        instance.pointers.emplace(ptr.get(), ptr);
+        return res;
     }
 
     static v8::Local<v8::Object> FindObject(v8::Isolate *isolate, const std::shared_ptr<T> &ptr) {
@@ -189,6 +194,7 @@ public:
         auto object = Class<T>::FindObject(isolate, ptr.get());
         if (instance.pointers.find(ptr.get()) == instance.pointers.end()) {
             Class<T>::SetPointerManager(isolate, ptr.get(), &instance);
+            instance.pointers.emplace(ptr.get(), ptr);
         }
         return object;
     }
@@ -198,15 +204,12 @@ public:
         auto ptr = Class<T>::UnwrapObject(isolate, value);
         if (instance.pointers.find(ptr) == instance.pointers.end()) {
             Class<T>::SetPointerManager(isolate, ptr, &instance);
+            instance.pointers.emplace(ptr, std::shared_ptr<T>(ptr));
         }
         return instance.pointers.find(ptr)->second;
     }
 
 protected:
-    void BeginObjectManage(void *ptr) override {
-        pointers.emplace(static_cast<T *>(ptr), std::shared_ptr<T>(static_cast<T *>(ptr)));
-    }
-
     void EndObjectManage(void *ptr) override {
         pointers.erase(static_cast<T *>(ptr));
     }

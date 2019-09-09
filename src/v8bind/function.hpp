@@ -76,36 +76,43 @@ private:
 };
 
 
-template<typename Args, typename F, typename ...C, size_t ...Indices>
+template<typename R, typename Args, typename F, typename ...C, size_t ...Indices>
 v8::Local<v8::Value> CallFunctionImpl(
         F &&callable,
         const v8::FunctionCallbackInfo<v8::Value> &info,
         std::index_sequence<Indices...>,
         C&&... o) {
-    return ToV8(info.GetIsolate(), std::invoke(std::forward<F>(callable), std::forward<C>(o)...,
-                    FromV8<std::tuple_element_t<Indices, Args>>(info.GetIsolate(), info[Indices])...));
+
+    if constexpr (std::is_same_v<R, void>) {
+        std::invoke(std::forward<F>(callable), std::forward<C>(o)...,
+                    FromV8<std::tuple_element_t<Indices, Args>>(info.GetIsolate(), info[Indices])...);
+        return v8::Local<v8::Value>();
+    } else {
+        return ToV8(info.GetIsolate(), std::invoke(std::forward<F>(callable), std::forward<C>(o)...,
+                                                   FromV8<std::tuple_element_t<Indices, Args>>(info.GetIsolate(), info[Indices])...));
+    }
 }
 
-template<typename Args, typename F, typename ...C>
+template<typename R, typename Args, typename F, typename ...C>
 v8::Local<v8::Value> CallFunction(
         F &&callable,
         const v8::FunctionCallbackInfo<v8::Value> &info,
         C&&... o) {
     using indices = std::make_index_sequence<std::tuple_size_v<Args>>;
-    return CallFunctionImpl<Args, F, C...>(std::forward<F>(callable), info, indices {}, std::forward<C>(o)...);
+    return CallFunctionImpl<R, Args, F, C...>(std::forward<F>(callable), info, indices {}, std::forward<C>(o)...);
 }
 
-template<typename Args, typename O = void, typename F>
+template<typename R, typename Args, typename O = void, typename F>
 decltype(auto) WrapFunctionImpl(F &&callable) {
     return [callable](const v8::FunctionCallbackInfo<v8::Value> &info) {
         if (!traits::argument_traits<Args>::is_match(info)) {
             throw std::runtime_error("No suitable function found");
         }
         if constexpr (std::is_same_v<O, void>) {
-            info.GetReturnValue().Set(CallFunction<Args>(callable, info));
+            info.GetReturnValue().Set(CallFunction<R, Args>(callable, info));
         } else {
             auto &object = FromV8<O>(info.GetIsolate(), info.This());
-            info.GetReturnValue().Set(CallFunction<Args>(callable, info, object));
+            info.GetReturnValue().Set(CallFunction<R, Args>(callable, info, object));
         }
     };
 }
@@ -140,8 +147,10 @@ template<typename ...FS>
 v8::Local<v8::FunctionTemplate> WrapFunction(v8::Isolate *isolate, FS&&... fs) {
     v8::EscapableHandleScope scope(isolate);
 
-    std::tuple wrapped_functions(impl::WrapFunctionImpl<typename traits::function_traits<FS>::arguments>(
-                    CallableFromFunction(std::forward<FS>(fs)))...);
+    std::tuple wrapped_functions(impl::WrapFunctionImpl<
+            typename traits::function_traits<FS>::return_type,
+            typename traits::function_traits<FS>::arguments>(
+                    impl::CallableFromFunction(std::forward<FS>(fs)))...);
 
     return scope.Escape(v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {
         try {
@@ -158,6 +167,7 @@ v8::Local<v8::FunctionTemplate> WrapMemberFunction(v8::Isolate *isolate, FS&&...
     v8::EscapableHandleScope scope(isolate);
 
     std::tuple wrapped_functions(impl::WrapFunctionImpl<
+            typename traits::function_traits<FS>::return_type,
             typename traits::tuple_tail_t<typename traits::function_traits<FS>::arguments>,
             typename std::tuple_element_t<0, typename traits::function_traits<FS>::arguments>>(
                 impl::CallableFromFunction(std::forward<FS>(fs)))...);
