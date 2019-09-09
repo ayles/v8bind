@@ -198,7 +198,7 @@ struct Convert<T, typename std::enable_if_t<IsWrappedClass<T>::value>> {
         return *ptr;
     }
 
-    static V8Type ToV8(v8::Isolate *isolate, CType value) {
+    static V8Type ToV8(v8::Isolate *isolate, const T &value) {
         auto wrapped = Class<std::remove_cv_t<T>>::FindObject(isolate, value);
         if (wrapped.IsEmpty()) {
             throw std::runtime_error("Failed to wrap object");

@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 17)
 
 set(V8BIND_HEADERS
         src/v8bind/class.hpp
-        src/v8bind/utility.hpp
+        src/v8bind/traits.hpp
         src/v8bind/convert.hpp
         src/v8bind/function.hpp
         src/v8bind/type_info.hpp

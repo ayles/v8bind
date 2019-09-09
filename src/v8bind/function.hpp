@@ -6,7 +6,7 @@
 #define SANDWICH_V8B_FUNCTION_HPP
 
 #include <v8bind/convert.hpp>
-#include <v8bind/utility.hpp>
+#include <v8bind/traits.hpp>
 
 #include <v8.h>
 
@@ -15,6 +15,7 @@
 #include <functional>
 
 namespace v8b {
+namespace impl {
 
 class ExternalData {
 public:
@@ -74,128 +75,104 @@ private:
     };
 };
 
-/*template<typename F, size_t ...Indices>
-void call_f_impl(void *f_ptr, const v8::FunctionCallbackInfo<v8::Value> &info, std::index_sequence<Indices...>) {
-    using pointer_type = typename function_traits<F>::pointer_type;
-    using arguments_tuple_type = typename function_traits<F>::arguments;
 
-    auto function_pointer = static_cast<pointer_type>(f_ptr);
-
-    if constexpr (std::is_member_function_pointer_v<F>) {
-        // TODO
-    } else {
-        function_pointer((
-                convert<std::decay_t<std::tuple_element_t<Indices, arguments_tuple_type>>>
-                ::from_v8(info.GetIsolate(), info[Indices]))...);
-    }
+template<typename Args, typename F, typename ...C, size_t ...Indices>
+v8::Local<v8::Value> CallFunctionImpl(
+        F &&callable,
+        const v8::FunctionCallbackInfo<v8::Value> &info,
+        std::index_sequence<Indices...>,
+        C&&... o) {
+    return ToV8(info.GetIsolate(), std::invoke(std::forward<F>(callable), std::forward<C>(o)...,
+                    FromV8<std::tuple_element_t<Indices, Args>>(info.GetIsolate(), info[Indices])...));
 }
 
-template<typename F>
-bool call_f(void **f_ptr, const v8::FunctionCallbackInfo<v8::Value> &info, int offset = 0) {
-    if (!arguments_traits<typename function_traits<F>::arguments>::is_match(info)) {
-        return false;
-    }
-    using indices = std::make_index_sequence<std::tuple_size_v<typename function_traits<F>::arguments>>;
-    call_f_impl<F>(f_ptr[offset], info, indices {});
-    return true;
+template<typename Args, typename F, typename ...C>
+v8::Local<v8::Value> CallFunction(
+        F &&callable,
+        const v8::FunctionCallbackInfo<v8::Value> &info,
+        C&&... o) {
+    using indices = std::make_index_sequence<std::tuple_size_v<Args>>;
+    return CallFunctionImpl<Args, F, C...>(std::forward<F>(callable), info, indices {}, std::forward<C>(o)...);
 }
 
-template<typename F1, typename F2, typename ...F>
-bool call_f(void **f_ptr, const v8::FunctionCallbackInfo<v8::Value> &info, int offset = 0) {
-    return call_f<F1>(f_ptr, info, offset) || call_f<F2, F...>(f_ptr, info, offset + 1);
-}
-
-template<typename ...F>
-decltype(auto) get_f() {
-    return [](const v8::FunctionCallbackInfo<v8::Value> &info) {
-        call_f<F...>(static_cast<void **>(info.Data().As<v8::External>()->Value()), info);
+template<typename Args, typename O = void, typename F>
+decltype(auto) WrapFunctionImpl(F &&callable) {
+    return [callable](const v8::FunctionCallbackInfo<v8::Value> &info) {
+        if (!traits::argument_traits<Args>::is_match(info)) {
+            throw std::runtime_error("No suitable function found");
+        }
+        if constexpr (std::is_same_v<O, void>) {
+            info.GetReturnValue().Set(CallFunction<Args>(callable, info));
+        } else {
+            auto &object = FromV8<O>(info.GetIsolate(), info.This());
+            info.GetReturnValue().Set(CallFunction<Args>(callable, info, object));
+        }
     };
 }
 
-template<typename ...F>
-v8::Local<v8::FunctionTemplate> wrap_function(v8::Isolate *isolate, F&&... fs) {
-    auto data = new std::vector<void *> { (static_cast<void *>(fs))... };
-    return v8::FunctionTemplate::New(isolate, get_f<F...>(), v8::External::New(isolate, static_cast<void *>(data->data())));
-}*/
-
-
-
-template<typename F, typename ...C, size_t ...Indices>
-v8::Local<v8::Value> CallFunctionImpl(F &&f,
+template<size_t index = 0, typename ...WFS>
+void CallWrappedPack(
         const v8::FunctionCallbackInfo<v8::Value> &info,
-        std::index_sequence<Indices...>, C&&... o) {
-    using Args = typename utility::FunctionTraits<F>::Arguments;
-    return ToV8(info.GetIsolate(), std::invoke(std::forward<F>(f), std::forward<C>(o)...,
-            FromV8<std::tuple_element_t<Indices, Args>>(info.GetIsolate(), info[Indices])...));
-}
-
-template<typename F, typename ...C>
-v8::Local<v8::Value> CallFunction(F &&f,
-        const v8::FunctionCallbackInfo<v8::Value> &info, C&&... o) {
-    using Args = typename utility::FunctionTraits<F>::Arguments;
-    using indices = std::make_index_sequence<std::tuple_size_v<Args>>;
-    return CallFunctionImpl<F, C...>(std::forward<F>(f), info, indices {}, std::forward<C>(o)...);
-}
-
-template<typename F>
-int SelectFunction(const v8::FunctionCallbackInfo<v8::Value> &info, int offset = 0) {
-    if (!utility::ArgumentTraits<typename utility::FunctionTraits<F>::Arguments>::IsMatch(info)) {
+        const std::tuple<WFS...> &wrapped_functions) {
+    if constexpr (index < std::tuple_size_v<std::tuple<WFS...>>) {
+        try {
+            std::get<index>(wrapped_functions)(info);
+        } catch (const std::exception &) {
+            CallWrappedPack<index + 1>(info, wrapped_functions);
+        }
+    } else {
         throw std::runtime_error("No suitable function found");
     }
-    return offset;
-}
-
-template<typename F1, typename F2, typename ...FS>
-int SelectFunction(const v8::FunctionCallbackInfo<v8::Value> &info, int offset = 0) {
-    try {
-        return SelectFunction<F1>(info, offset);
-    } catch (const std::exception &) {}
-    return SelectFunction<F2, FS...>(info, offset + 1);
 }
 
 template<typename F>
-v8::Local<v8::FunctionTemplate> WrapFunctionImpl(v8::Isolate *isolate, F&& f) {
-    v8::EscapableHandleScope scope(isolate);
-    using Traits = typename utility::FunctionTraits<F>;
-    return scope.Escape(v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {
-        auto function_pointer = ExternalData::Unwrap<typename Traits::PointerType>(info.Data());
-        if constexpr (std::is_member_function_pointer_v<std::remove_reference_t<F>>) {
-            auto object = FromV8<typename Traits::ClassType *>(info.GetIsolate(), info.This());
-            info.GetReturnValue().Set(CallFunction(function_pointer, info, object));
-        } else {
-            info.GetReturnValue().Set(CallFunction(function_pointer, info));
-        }
-    }, ExternalData::New(isolate, std::forward<F>(f))));
+decltype(auto) CallableFromFunction(F &&f) {
+    if constexpr (std::is_member_function_pointer_v<F>) {
+        return std::mem_fn(std::forward<F>(f));
+    } else {
+        return std::function(std::forward<F>(f));
+    }
+}
+
 }
 
 template<typename ...FS>
 v8::Local<v8::FunctionTemplate> WrapFunction(v8::Isolate *isolate, FS&&... fs) {
     v8::EscapableHandleScope scope(isolate);
-    std::vector<v8::Local<v8::FunctionTemplate>>
-        functions_l { WrapFunctionImpl(isolate, std::forward<FS>(fs))... };
-    std::vector<v8::Global<v8::FunctionTemplate>> functions;
-    functions.reserve(functions_l.size());
-    for (auto &f : functions_l) {
-        functions.emplace_back(isolate, f);
-    }
+
+    std::tuple wrapped_functions(impl::WrapFunctionImpl<typename traits::function_traits<FS>::arguments>(
+                    CallableFromFunction(std::forward<FS>(fs)))...);
+
     return scope.Escape(v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {
         try {
-            v8::Isolate *isolate = info.GetIsolate();
-            auto context = isolate->GetCurrentContext();
-            auto f = ExternalData::Unwrap<std::vector<v8::Global<v8::FunctionTemplate>>>(
-                    info.Data())[SelectFunction<FS...>(info)].Get(isolate)
-                    ->GetFunction(context).ToLocalChecked();
-            std::vector<v8::Local<v8::Value>> args(info.Length());
-            for (int i = 0; i < info.Length(); ++i) {
-                args[i] = info[i];
-            }
-            info.GetReturnValue().Set(f->Call(context, info.This(), info.Length(), args.data()).ToLocalChecked());
+            auto &w_f = impl::ExternalData::Unwrap<decltype(wrapped_functions)>(info.Data());
+            CallWrappedPack(info, w_f);
         } catch (const std::exception &e) {
             info.GetIsolate()->ThrowException(v8::Exception::Error(v8_str(e.what())));
         }
-    }, ExternalData::New(isolate, std::move(functions))));
+    }, impl::ExternalData::New(isolate, std::move(wrapped_functions))));
 }
 
+template<typename ...FS>
+v8::Local<v8::FunctionTemplate> WrapMemberFunction(v8::Isolate *isolate, FS&&... fs) {
+    v8::EscapableHandleScope scope(isolate);
+
+    std::tuple wrapped_functions(impl::WrapFunctionImpl<
+            typename traits::tuple_tail_t<typename traits::function_traits<FS>::arguments>,
+            typename std::tuple_element_t<0, typename traits::function_traits<FS>::arguments>>(
+                impl::CallableFromFunction(std::forward<FS>(fs)))...);
+
+    return scope.Escape(v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &info) {
+        try {
+            auto &w_f = impl::ExternalData::Unwrap<decltype(wrapped_functions)>(info.Data());
+            CallWrappedPack(info, w_f);
+        } catch (const std::exception &e) {
+            info.GetIsolate()->ThrowException(v8::Exception::Error(v8_str(e.what())));
+        }
+    }, impl::ExternalData::New(isolate, std::move(wrapped_functions))));
+}
+
+namespace impl {
 
 template<typename T, typename AS, size_t ...Indices>
 T *CallConstructorImpl(const v8::FunctionCallbackInfo<v8::Value> &info,
@@ -204,13 +181,15 @@ T *CallConstructorImpl(const v8::FunctionCallbackInfo<v8::Value> &info,
                     info.GetIsolate(), info[Indices])...);
 }
 
+}
+
 template<typename T, typename AS>
 T *CallConstructor(const v8::FunctionCallbackInfo<v8::Value> &args) {
-    if (!utility::ArgumentTraits<AS>::IsMatch(args)) {
+    if (!traits::argument_traits<AS>::is_match(args)) {
         throw std::runtime_error("No suitable constructor found");
     }
     using indices = std::make_index_sequence<std::tuple_size_v<AS>>;
-    return CallConstructorImpl<T, AS>(args, indices {});
+    return impl::CallConstructorImpl<T, AS>(args, indices {});
 }
 
 template<typename T, typename AS1, typename AS2, typename ...Args>
