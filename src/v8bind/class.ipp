@@ -7,11 +7,13 @@
 
 #include <v8bind/class.hpp>
 #include <v8bind/function.hpp>
+#include <v8bind/default_bindings.hpp>
 
 #include <v8.h>
 
 #include <stdexcept>
 #include <algorithm>
+#include <string>
 
 namespace v8b {
 
@@ -28,7 +30,7 @@ ClassManager::ClassManager(v8::Isolate *isolate, const v8b::TypeInfo &type_info)
             }
             args.GetReturnValue().Set(self->WrapObject(self->constructor_function(args)));
         } catch (const std::exception &e) {
-            args.GetIsolate()->ThrowException(v8::Exception::Error(v8_str(e.what())));
+            args.GetIsolate()->ThrowException(v8::Exception::Error(ToV8(args.GetIsolate(), std::string(e.what()))));
         }
     }, impl::ExternalData::New(isolate, this));
 
@@ -243,6 +245,12 @@ void ClassManager::EndObjectManage(void *ptr) {
     destructor_function(isolate, ptr);
 }
 
+template<typename T>
+ClassManager &ClassManagerPool::Get(v8::Isolate *isolate) {
+    static bool initialized = DefaultBindings<T>::Initialize(isolate);
+    return Get(isolate, TypeInfo::Get<T>());
+}
+
 ClassManager &ClassManagerPool::Get(v8::Isolate *isolate, const TypeInfo &type_info) {
     auto &pool = GetInstance(isolate);
     auto it = std::find_if(pool.managers.begin(), pool.managers.end(),
@@ -344,7 +352,7 @@ Class<T> &Class<T>::Var(const std::string &name, Member &&ptr) {
             auto member = impl::ExternalData::Unwrap<Member>(info.Data());
             info.GetReturnValue().Set(ToV8(info.GetIsolate(), (*obj).*member));
         } catch (const std::exception &e) {
-            info.GetIsolate()->ThrowException(v8::Exception::Error(v8_str(e.what())));
+            info.GetIsolate()->ThrowException(v8::Exception::Error(ToV8(info.GetIsolate(), std::string(e.what()))));
         }
     };
 
@@ -358,7 +366,7 @@ Class<T> &Class<T>::Var(const std::string &name, Member &&ptr) {
                 auto member = impl::ExternalData::Unwrap<Member>(info.Data());
                 (*obj).*member = FromV8<typename MemberTrait::return_type>(info.GetIsolate(), value);
             } catch (const std::exception &e) {
-                info.GetIsolate()->ThrowException(v8::Exception::Error(v8_str(e.what())));
+                info.GetIsolate()->ThrowException(v8::Exception::Error(ToV8(info.GetIsolate(), std::string(e.what()))));
             }
         };
         attribute = v8::DontDelete;
@@ -415,7 +423,7 @@ Class<T> &Class<T>::Property(const std::string &name, Getter &&get, Setter &&set
 
             info.GetReturnValue().Set(ToV8(info.GetIsolate(), std::invoke(std::get<0>(acc), *obj)));
         } catch (const std::exception &e) {
-            info.GetIsolate()->ThrowException(v8::Exception::Error(v8_str(e.what())));
+            info.GetIsolate()->ThrowException(v8::Exception::Error(ToV8(info.GetIsolate(), std::string(e.what()))));
         }
     };
 
@@ -430,7 +438,7 @@ Class<T> &Class<T>::Property(const std::string &name, Getter &&get, Setter &&set
                 std::invoke(std::get<1>(acc), *obj,
                             FromV8<std::tuple_element_t<1, typename SetterTrait::arguments>>(info.GetIsolate(), value));
             } catch (const std::exception &e) {
-                info.GetIsolate()->ThrowException(v8::Exception::Error(v8_str(e.what())));
+                info.GetIsolate()->ThrowException(v8::Exception::Error(ToV8(info.GetIsolate(), std::string(e.what()))));
             }
         };
         attribute = v8::DontDelete;
@@ -474,7 +482,7 @@ Class<T> &Class<T>::Indexer(Getter &&get, Setter &&set) {
             auto acc = impl::ExternalData::Unwrap<decltype(accessors)>(info.Data());
             info.GetReturnValue().Set(ToV8(info.GetIsolate(), std::invoke(std::get<0>(acc), *obj, index)));
         } catch (const std::exception &e) {
-            info.GetIsolate()->ThrowException(v8::Exception::Error(v8_str(e.what())));
+            info.GetIsolate()->ThrowException(v8::Exception::Error(ToV8(info.GetIsolate(), std::string(e.what()))));
         }
     };
 
@@ -488,7 +496,7 @@ Class<T> &Class<T>::Indexer(Getter &&get, Setter &&set) {
                 std::invoke(std::get<1>(acc), *obj, index,
                         FromV8<std::tuple_element_t<1, typename SetterTrait::arguments>>(info.GetIsolate(), value));
             } catch (const std::exception &e) {
-                info.GetIsolate()->ThrowException(v8::Exception::Error(v8_str(e.what())));
+                info.GetIsolate()->ThrowException(v8::Exception::Error(ToV8(info.GetIsolate(), std::string(e.what()))));
             }
         };
     }
@@ -528,7 +536,7 @@ Class<T> &Class<T>::StaticVar(const std::string &name, V &&v) {
             auto var = impl::ExternalData::Unwrap<V>(info.Data());
             info.GetReturnValue().Set(ToV8(info.GetIsolate(), *var));
         } catch (const std::exception &e) {
-            info.GetIsolate()->ThrowException(v8::Exception::Error(v8_str(e.what())));
+            info.GetIsolate()->ThrowException(v8::Exception::Error(ToV8(info.GetIsolate(), std::string(e.what()))));
         }
     };
 
@@ -541,7 +549,7 @@ Class<T> &Class<T>::StaticVar(const std::string &name, V &&v) {
                 auto var = impl::ExternalData::Unwrap<V>(info.Data());
                 *var = FromV8<std::remove_pointer_t<V>>(info.GetIsolate(), value);
             } catch (const std::exception &e) {
-                info.GetIsolate()->ThrowException(v8::Exception::Error(v8_str(e.what())));
+                info.GetIsolate()->ThrowException(v8::Exception::Error(ToV8(info.GetIsolate(), std::string(e.what()))));
             }
         };
         attribute = v8::DontDelete;
@@ -577,30 +585,30 @@ v8::Local<v8::FunctionTemplate> Class<T>::GetFunctionTemplate() {
 
 template<typename T>
 T *Class<T>::UnwrapObject(v8::Isolate *isolate, v8::Local<v8::Value> value) {
-    return static_cast<T *>(ClassManagerPool::Get(isolate, TypeInfo::Get<T>()).UnwrapObject(value));
+    return static_cast<T *>(ClassManagerPool::Get<T>(isolate).UnwrapObject(value));
 }
 
 template<typename T>
 v8::Local<v8::Object> Class<T>::WrapObject(v8::Isolate *isolate, T *ptr, bool take_ownership) {
     if (!take_ownership) {
-        return ClassManagerPool::Get(isolate, TypeInfo::Get<T>()).WrapObject(ptr, nullptr);
+        return ClassManagerPool::Get<T>(isolate).WrapObject(ptr, nullptr);
     }
-    return ClassManagerPool::Get(isolate, TypeInfo::Get<T>()).WrapObject(ptr);
+    return ClassManagerPool::Get<T>(isolate).WrapObject(ptr);
 }
 
 template<typename T>
 v8::Local<v8::Object> Class<T>::WrapObject(v8::Isolate *isolate, T *ptr, PointerManager *pointer_manager) {
-    return ClassManagerPool::Get(isolate, TypeInfo::Get<T>()).WrapObject(ptr, pointer_manager);
+    return ClassManagerPool::Get<T>(isolate).WrapObject(ptr, pointer_manager);
 }
 
 template<typename T>
 void Class<T>::SetPointerManager(v8::Isolate *isolate, T *ptr, PointerManager *pointer_manager) {
-    ClassManagerPool::Get(isolate, TypeInfo::Get<T>()).SetPointerManager(ptr, pointer_manager);
+    ClassManagerPool::Get<T>(isolate).SetPointerManager(ptr, pointer_manager);
 }
 
 template<typename T>
 v8::Local<v8::Object> Class<T>::FindObject(v8::Isolate *isolate, const T &obj) {
-    auto &class_manager = ClassManagerPool::Get(isolate, TypeInfo::Get<T>());
+    auto &class_manager = ClassManagerPool::Get<T>(isolate);
     try {
         return class_manager.FindObject(const_cast<T *>(&obj));
     } catch (const std::exception &e) {
@@ -620,7 +628,7 @@ v8::Local<v8::Object> Class<T>::FindObject(v8::Isolate *isolate, const T &obj) {
 
 template<typename T>
 v8::Local<v8::Object> Class<T>::FindObject(v8::Isolate *isolate, T *ptr) {
-    auto &class_manager = ClassManagerPool::Get(isolate, TypeInfo::Get<T>());
+    auto &class_manager = ClassManagerPool::Get<T>(isolate);
     try {
         return class_manager.FindObject(ptr);
     } catch (const std::exception &e) {

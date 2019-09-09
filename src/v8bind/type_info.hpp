@@ -8,6 +8,7 @@
 #include <functional>
 #include <string>
 #include <type_traits>
+#include <cstring>
 
 // Check RTTI
 #if defined(__clang__)
@@ -26,9 +27,13 @@
 
 // Pretty function
 #if defined(_MSC_VER)
+    #define FUNCTION_FRONT_DISCARD_SIZE 43u
+    #define FUNCTION_BACK_DISCARD_SIZE 7u
     #define UNIQUE_FUNCTION_ID __FUNCSIG__
 #else
     #if defined( __GNUC__ ) || defined(__clang__)
+        #define FUNCTION_FRONT_DISCARD_SIZE 54u
+        #define FUNCTION_BACK_DISCARD_SIZE 1u
         #define UNIQUE_FUNCTION_ID __PRETTY_FUNCTION__
     #endif
 #endif
@@ -46,10 +51,13 @@ struct TypeInfo {
     using TypeId = size_t;
 #endif
 
-    TypeInfo(const TypeInfo &other, size_t size) : type_id(other.type_id), size(size) {}
+    TypeInfo(const TypeInfo &other)
+            : type_id(other.type_id), size(other.size), name(other.name) {}
+
     TypeInfo &operator=(const TypeInfo &other) {
         type_id = other.type_id;
         size = other.size;
+        name = other.name;
         return *this;
     }
 
@@ -87,15 +95,20 @@ struct TypeInfo {
         return size;
     }
 
+    [[nodiscard]]
+    const char *GetName() const {
+        return name;
+    }
+
 #if defined(RTTI_ENABLED)
     template<typename T>
     static TypeInfo Get() {
-        return TypeInfo(std::type_index(typeid(T)));
+        return TypeInfo(std::type_index(typeid(T)), sizeof(T), GetName<T>());
     }
 
     template<typename T>
     static TypeInfo Get(T &&t) {
-        return TypeInfo(std::type_index(typeid(std::forward<T>(t))));
+        return TypeInfo(std::type_index(typeid(std::forward<T>(t))), sizeof(T), GetName<T>());
     }
 #else
     template<typename T>
@@ -117,8 +130,20 @@ struct TypeInfo {
 private:
     TypeId type_id;
     size_t size;
+    const char *name;
 
-    explicit TypeInfo(TypeId type_id) : type_id(type_id) {}
+    explicit TypeInfo(TypeId type_id, size_t size, const char *name)
+        : type_id(type_id), size(size), name(name) {}
+
+    template<typename T>
+    static const char *GetName() {
+        static const size_t size = sizeof(UNIQUE_FUNCTION_ID) - FUNCTION_FRONT_DISCARD_SIZE - FUNCTION_BACK_DISCARD_SIZE;
+        static char name[size] = {};
+        if (!name[0]) {
+            std::memcpy(name, UNIQUE_FUNCTION_ID + FUNCTION_FRONT_DISCARD_SIZE, size - 1u);
+        }
+        return name;
+    }
 
 #if !defined(RTTI_ENABLED)
     static size_t constexpr ConstStringHash(const char *input) {

@@ -115,6 +115,9 @@ private:
 
 class ClassManagerPool {
 public:
+    template<typename T>
+    static ClassManager &Get(v8::Isolate *isolate);
+
     static ClassManager &Get(v8::Isolate *isolate, const TypeInfo &type_info);
     static void Remove(v8::Isolate *isolate, const TypeInfo &type_info);
     static void RemoveAll(v8::Isolate *isolate);
@@ -175,6 +178,9 @@ public:
     static v8::Local<v8::Object> FindObject(v8::Isolate *isolate, T *ptr);
     static v8::Local<v8::Object> FindObject(v8::Isolate *isolate, const T &obj);
     static void SetPointerManager(v8::Isolate *isolate, T *ptr, PointerManager *pointerManager);
+
+private:
+    static bool initialized;
 };
 
 template<typename T>

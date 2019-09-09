@@ -157,7 +157,7 @@ v8::Local<v8::FunctionTemplate> WrapFunction(v8::Isolate *isolate, FS&&... fs) {
             auto &w_f = impl::ExternalData::Unwrap<decltype(wrapped_functions)>(info.Data());
             CallWrappedPack(info, w_f);
         } catch (const std::exception &e) {
-            info.GetIsolate()->ThrowException(v8::Exception::Error(v8_str(e.what())));
+            info.GetIsolate()->ThrowException(v8::Exception::Error(ToV8(info.GetIsolate(), std::string(e.what()))));
         }
     }, impl::ExternalData::New(isolate, std::move(wrapped_functions))));
 }
@@ -177,7 +177,7 @@ v8::Local<v8::FunctionTemplate> WrapMemberFunction(v8::Isolate *isolate, FS&&...
             auto &w_f = impl::ExternalData::Unwrap<decltype(wrapped_functions)>(info.Data());
             CallWrappedPack(info, w_f);
         } catch (const std::exception &e) {
-            info.GetIsolate()->ThrowException(v8::Exception::Error(v8_str(e.what())));
+            info.GetIsolate()->ThrowException(v8::Exception::Error(ToV8(info.GetIsolate(), std::string(e.what()))));
         }
     }, impl::ExternalData::New(isolate, std::move(wrapped_functions))));
 }
