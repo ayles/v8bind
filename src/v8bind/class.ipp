@@ -422,20 +422,18 @@ Class<T> &Class<T>::Property(const std::string &name, Getter &&get, Setter &&set
     v8::AccessorSetterCallback setter = nullptr;
     auto attribute = v8::PropertyAttribute(v8::DontDelete | v8::ReadOnly);
     if constexpr (!std::is_same_v<Setter, nullptr_t>) {
-        if (set != nullptr) {
-            setter = [](v8::Local<v8::String> property, v8::Local<v8::Value> value,
-               const v8::PropertyCallbackInfo<void> &info) {
-                try {
-                    auto obj = UnwrapObject(info.GetIsolate(), info.This());
-                    auto acc = impl::ExternalData::Unwrap<decltype(accessors)>(info.Data());
-                    std::invoke(std::get<1>(acc), *obj,
-                                FromV8<std::tuple_element_t<1, typename SetterTrait::arguments>>(info.GetIsolate(), value));
-                } catch (const std::exception &e) {
-                    info.GetIsolate()->ThrowException(v8::Exception::Error(v8_str(e.what())));
-                }
-            };
-            attribute = v8::DontDelete;
-        }
+        setter = [](v8::Local<v8::String> property, v8::Local<v8::Value> value,
+           const v8::PropertyCallbackInfo<void> &info) {
+            try {
+                auto obj = UnwrapObject(info.GetIsolate(), info.This());
+                auto acc = impl::ExternalData::Unwrap<decltype(accessors)>(info.Data());
+                std::invoke(std::get<1>(acc), *obj,
+                            FromV8<std::tuple_element_t<1, typename SetterTrait::arguments>>(info.GetIsolate(), value));
+            } catch (const std::exception &e) {
+                info.GetIsolate()->ThrowException(v8::Exception::Error(v8_str(e.what())));
+            }
+        };
+        attribute = v8::DontDelete;
     }
 
     class_manager.GetFunctionTemplate()->PrototypeTemplate()->SetAccessor(
@@ -482,19 +480,17 @@ Class<T> &Class<T>::Indexer(Getter &&get, Setter &&set) {
 
     v8::IndexedPropertySetterCallback setter = nullptr;
     if constexpr (!std::is_same_v<Setter, nullptr_t>) {
-        if (set != nullptr) {
-            setter = [](uint32_t index, v8::Local<v8::Value> value,
-                const v8::PropertyCallbackInfo<v8::Value> &info) {
-                try {
-                    auto obj = UnwrapObject(info.GetIsolate(), info.This());
-                    auto acc = impl::ExternalData::Unwrap<decltype(accessors)>(info.Data());
-                    std::invoke(std::get<1>(acc), *obj, index,
-                            FromV8<std::tuple_element_t<1, typename SetterTrait::arguments>>(info.GetIsolate(), value));
-                } catch (const std::exception &e) {
-                    info.GetIsolate()->ThrowException(v8::Exception::Error(v8_str(e.what())));
-                }
-            };
-        }
+        setter = [](uint32_t index, v8::Local<v8::Value> value,
+            const v8::PropertyCallbackInfo<v8::Value> &info) {
+            try {
+                auto obj = UnwrapObject(info.GetIsolate(), info.This());
+                auto acc = impl::ExternalData::Unwrap<decltype(accessors)>(info.Data());
+                std::invoke(std::get<1>(acc), *obj, index,
+                        FromV8<std::tuple_element_t<1, typename SetterTrait::arguments>>(info.GetIsolate(), value));
+            } catch (const std::exception &e) {
+                info.GetIsolate()->ThrowException(v8::Exception::Error(v8_str(e.what())));
+            }
+        };
     }
 
     class_manager.GetFunctionTemplate()->InstanceTemplate()->SetIndexedPropertyHandler(
