@@ -13,6 +13,8 @@
 #include <type_traits>
 #include <memory>
 
+#define V8B_IMPL inline
+
 namespace v8b {
 
 class PointerManager {
@@ -188,14 +190,14 @@ class SharedPointerManager : public PointerManager {
     std::unordered_map<T *, std::shared_ptr<T>> pointers;
 
 public:
-    static v8::Local<v8::Object> WrapObject(v8::Isolate *isolate, const std::shared_ptr<T> &ptr) {
+    V8B_IMPL static v8::Local<v8::Object> WrapObject(v8::Isolate *isolate, const std::shared_ptr<T> &ptr) {
         auto &instance = PointerManager::GetInstance<SharedPointerManager>();
         auto res = Class<T>::WrapObject(isolate, ptr.get(), &instance);
         instance.pointers.emplace(ptr.get(), ptr);
         return res;
     }
 
-    static v8::Local<v8::Object> FindObject(v8::Isolate *isolate, const std::shared_ptr<T> &ptr) {
+    V8B_IMPL static v8::Local<v8::Object> FindObject(v8::Isolate *isolate, const std::shared_ptr<T> &ptr) {
         auto &instance = PointerManager::GetInstance<SharedPointerManager>();
         auto object = Class<T>::FindObject(isolate, ptr.get());
         if (instance.pointers.find(ptr.get()) == instance.pointers.end()) {
@@ -205,7 +207,7 @@ public:
         return object;
     }
 
-    static std::shared_ptr<T> UnwrapObject(v8::Isolate *isolate, v8::Local<v8::Value> value) {
+    V8B_IMPL static std::shared_ptr<T> UnwrapObject(v8::Isolate *isolate, v8::Local<v8::Value> value) {
         auto &instance = PointerManager::GetInstance<SharedPointerManager>();
         auto ptr = Class<T>::UnwrapObject(isolate, value);
         if (instance.pointers.find(ptr) == instance.pointers.end()) {
@@ -216,7 +218,7 @@ public:
     }
 
 protected:
-    void EndObjectManage(void *ptr) override {
+    V8B_IMPL void EndObjectManage(void *ptr) override {
         pointers.erase(static_cast<T *>(ptr));
     }
 };

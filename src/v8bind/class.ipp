@@ -17,7 +17,7 @@
 
 namespace v8b {
 
-ClassManager::ClassManager(v8::Isolate *isolate, const v8b::TypeInfo &type_info)
+V8B_IMPL ClassManager::ClassManager(v8::Isolate *isolate, const v8b::TypeInfo &type_info)
         : type_info(type_info), isolate(isolate), auto_wrap(false),
         pointer_auto_wrap(false), constructor_function(nullptr), destructor_function(nullptr) {
     v8::HandleScope scope(isolate);
@@ -41,11 +41,11 @@ ClassManager::ClassManager(v8::Isolate *isolate, const v8b::TypeInfo &type_info)
     f->InstanceTemplate()->SetInternalFieldCount(2);
 }
 
-ClassManager::~ClassManager() {
+V8B_IMPL ClassManager::~ClassManager() {
     RemoveObjects();
 }
 
-void ClassManager::RemoveObject(void *ptr) {
+V8B_IMPL void ClassManager::RemoveObject(void *ptr) {
     auto it = objects.find(ptr);
     if (it == objects.end()) {
         throw std::runtime_error("Can't remove unmanaged object");
@@ -55,7 +55,7 @@ void ClassManager::RemoveObject(void *ptr) {
     objects.erase(it);
 }
 
-void ClassManager::RemoveObjects() {
+V8B_IMPL void ClassManager::RemoveObjects() {
     v8::HandleScope scope(isolate);
     for (auto &p : objects) {
         ResetObject(p.second);
@@ -63,7 +63,7 @@ void ClassManager::RemoveObjects() {
     objects.clear();
 }
 
-ClassManager::WrappedObject &ClassManager::FindWrappedObject(void *ptr, void **base_ptr_ptr) const {
+V8B_IMPL ClassManager::WrappedObject &ClassManager::FindWrappedObject(void *ptr, void **base_ptr_ptr) const {
     // TODO
     auto it = objects.find(ptr);
     if (it == objects.end()) {
@@ -90,7 +90,7 @@ ClassManager::WrappedObject &ClassManager::FindWrappedObject(void *ptr, void **b
     return const_cast<WrappedObject &>(it->second);
 }
 
-void ClassManager::ResetObject(WrappedObject &object) {
+V8B_IMPL void ClassManager::ResetObject(WrappedObject &object) {
     if (object.pointer_manager) {
         object.pointer_manager->EndObjectManage(object.ptr);
     }
@@ -98,11 +98,11 @@ void ClassManager::ResetObject(WrappedObject &object) {
     isolate->AdjustAmountOfExternalAllocatedMemory(-static_cast<int64_t>(type_info.GetSize()));
 }
 
-v8::Local<v8::Object> ClassManager::FindObject(void *ptr) const {
+V8B_IMPL v8::Local<v8::Object> ClassManager::FindObject(void *ptr) const {
     return FindWrappedObject(ptr).wrapped_object.Get(isolate);
 }
 
-void ClassManager::SetPointerManager(void *ptr, PointerManager *pointer_manager) {
+V8B_IMPL void ClassManager::SetPointerManager(void *ptr, PointerManager *pointer_manager) {
     if (pointer_manager == nullptr) {
         throw std::runtime_error("Can't set nullptr as pointer manager");
     }
@@ -124,11 +124,11 @@ void ClassManager::SetPointerManager(void *ptr, PointerManager *pointer_manager)
     it->second.pointer_manager = pointer_manager;
 }
 
-v8::Local<v8::Object> ClassManager::WrapObject(void *ptr) {
+V8B_IMPL v8::Local<v8::Object> ClassManager::WrapObject(void *ptr) {
     return WrapObject(ptr, this);
 }
 
-v8::Local<v8::Object> ClassManager::WrapObject(void *ptr, PointerManager *pointer_manager) {
+V8B_IMPL v8::Local<v8::Object> ClassManager::WrapObject(void *ptr, PointerManager *pointer_manager) {
     if (!ptr) {
         return v8::Local<v8::Object>();
     }
@@ -175,7 +175,7 @@ v8::Local<v8::Object> ClassManager::WrapObject(void *ptr, PointerManager *pointe
     return scope.Escape(wrapped);
 }
 
-void *ClassManager::UnwrapObject(v8::Local<v8::Value> value) {
+V8B_IMPL void *ClassManager::UnwrapObject(v8::Local<v8::Value> value) {
     v8::HandleScope scope(isolate);
 
     if (!value->IsObject()) {
@@ -196,11 +196,11 @@ void *ClassManager::UnwrapObject(v8::Local<v8::Value> value) {
     return base_ptr;
 }
 
-v8::Local<v8::FunctionTemplate> ClassManager::GetFunctionTemplate() const {
+V8B_IMPL v8::Local<v8::FunctionTemplate> ClassManager::GetFunctionTemplate() const {
     return function_template.Get(isolate);
 }
 
-void ClassManager::SetBase(const v8b::TypeInfo &type_info,
+V8B_IMPL void ClassManager::SetBase(const v8b::TypeInfo &type_info,
         void *(*base_to_this)(void *), void *(*this_to_base)(void *)) {
     base_class_info = BaseClassInfo {
         &ClassManagerPool::Get(isolate, type_info),
@@ -213,45 +213,45 @@ void ClassManager::SetBase(const v8b::TypeInfo &type_info,
             base_class_info.base_class_manager->isolate));
 }
 
-void ClassManager::SetConstructor(ConstructorFunction constructor_function) {
+V8B_IMPL void ClassManager::SetConstructor(ConstructorFunction constructor_function) {
     this->constructor_function = constructor_function;
 }
 
-void ClassManager::SetDestructor(DestructorFunction destructor_function) {
+V8B_IMPL void ClassManager::SetDestructor(DestructorFunction destructor_function) {
     this->destructor_function = destructor_function;
 }
 
-void ClassManager::SetAutoWrap(bool auto_wrap) {
+V8B_IMPL void ClassManager::SetAutoWrap(bool auto_wrap) {
     this->auto_wrap = auto_wrap;
 }
 
-void ClassManager::SetPointerAutoWrap(bool auto_wrap) {
+V8B_IMPL void ClassManager::SetPointerAutoWrap(bool auto_wrap) {
     this->pointer_auto_wrap = auto_wrap;
 }
 
-bool ClassManager::IsAutoWrapEnabled() const {
+V8B_IMPL bool ClassManager::IsAutoWrapEnabled() const {
     return auto_wrap;
 }
 
-bool ClassManager::IsPointerAutoWrapEnabled() const {
+V8B_IMPL bool ClassManager::IsPointerAutoWrapEnabled() const {
     return pointer_auto_wrap;
 }
 
-v8::Isolate *ClassManager::GetIsolate() const {
+V8B_IMPL v8::Isolate *ClassManager::GetIsolate() const {
     return isolate;
 }
 
-void ClassManager::EndObjectManage(void *ptr) {
+V8B_IMPL void ClassManager::EndObjectManage(void *ptr) {
     destructor_function(isolate, ptr);
 }
 
 template<typename T>
-ClassManager &ClassManagerPool::Get(v8::Isolate *isolate) {
+V8B_IMPL ClassManager &ClassManagerPool::Get(v8::Isolate *isolate) {
     static bool initialized = DefaultBindings<T>::Initialize(isolate);
     return Get(isolate, TypeInfo::Get<T>());
 }
 
-ClassManager &ClassManagerPool::Get(v8::Isolate *isolate, const TypeInfo &type_info) {
+V8B_IMPL ClassManager &ClassManagerPool::Get(v8::Isolate *isolate, const TypeInfo &type_info) {
     auto &pool = GetInstance(isolate);
     auto it = std::find_if(pool.managers.begin(), pool.managers.end(),
             [&type_info](auto &class_manager) {
@@ -263,7 +263,7 @@ ClassManager &ClassManagerPool::Get(v8::Isolate *isolate, const TypeInfo &type_i
     return *static_cast<ClassManager *>(it->get());
 }
 
-void ClassManagerPool::Remove(v8::Isolate *isolate, const v8b::TypeInfo &type_info) {
+V8B_IMPL void ClassManagerPool::Remove(v8::Isolate *isolate, const v8b::TypeInfo &type_info) {
     auto &pool = GetInstance(isolate);
     auto it = std::find_if(pool.managers.begin(), pool.managers.end(),
             [&type_info](auto &class_manager) {
@@ -278,17 +278,17 @@ void ClassManagerPool::Remove(v8::Isolate *isolate, const v8b::TypeInfo &type_in
     }
 }
 
-void ClassManagerPool::RemoveAll(v8::Isolate *isolate) {
+V8B_IMPL void ClassManagerPool::RemoveAll(v8::Isolate *isolate) {
     RemoveInstance(isolate);
 }
 
-std::unordered_map<v8::Isolate *, ClassManagerPool> ClassManagerPool::pools;
+V8B_IMPL std::unordered_map<v8::Isolate *, ClassManagerPool> ClassManagerPool::pools;
 
-ClassManagerPool &ClassManagerPool::GetInstance(v8::Isolate *isolate) {
+V8B_IMPL ClassManagerPool &ClassManagerPool::GetInstance(v8::Isolate *isolate) {
     return pools[isolate];
 }
 
-void ClassManagerPool::RemoveInstance(v8::Isolate *isolate) {
+V8B_IMPL void ClassManagerPool::RemoveInstance(v8::Isolate *isolate) {
     pools.erase(isolate);
 }
 
@@ -297,25 +297,25 @@ void ClassManagerPool::RemoveInstance(v8::Isolate *isolate) {
 
 template<typename T>
 template<typename... Args>
-void *Class<T>::ObjectCreate(const v8::FunctionCallbackInfo<v8::Value> &args) {
+V8B_IMPL void *Class<T>::ObjectCreate(const v8::FunctionCallbackInfo<v8::Value> &args) {
     return CallConstructor<T, Args...>(args);
 }
 
 template<typename T>
-void Class<T>::ObjectDestroy(v8::Isolate *isolate, void *ptr) {
+V8B_IMPL void Class<T>::ObjectDestroy(v8::Isolate *isolate, void *ptr) {
     auto obj = static_cast<T *>(ptr);
     delete obj;
 }
 
 template<typename T>
-Class<T>::Class(v8::Isolate *isolate)
+V8B_IMPL Class<T>::Class(v8::Isolate *isolate)
         : class_manager(ClassManagerPool::Get(isolate, TypeInfo::Get<T>())) {
     class_manager.SetDestructor(ObjectDestroy);
 }
 
 template<typename T>
 template<typename B>
-Class<T> &Class<T>::Inherit() {
+V8B_IMPL Class<T> &Class<T>::Inherit() {
     static_assert(std::is_base_of_v<B, T>,
             "Class B should be base for class T");
     class_manager.SetBase(TypeInfo::Get<B>(),
@@ -331,14 +331,14 @@ Class<T> &Class<T>::Inherit() {
 
 template<typename T>
 template<typename... Args>
-Class<T> &Class<T>::Constructor() {
+V8B_IMPL Class<T> &Class<T>::Constructor() {
     class_manager.SetConstructor(ObjectCreate<Args...>);
     return *this;
 }
 
 template<typename T>
 template<typename Member>
-Class<T> &Class<T>::Var(const std::string &name, Member &&ptr) {
+V8B_IMPL Class<T> &Class<T>::Var(const std::string &name, Member &&ptr) {
     static_assert(std::is_member_object_pointer_v<Member>,
                   "Ptr must be pointer to member data");
 
@@ -386,7 +386,7 @@ Class<T> &Class<T>::Var(const std::string &name, Member &&ptr) {
 
 template<typename T>
 template<typename ...F>
-Class<T> &Class<T>::Function(const std::string &name, F&&... f) {
+V8B_IMPL Class<T> &Class<T>::Function(const std::string &name, F&&... f) {
     //static_assert(traits::multi_and(std::is_member_function_pointer_v<F>...),
       //            "All f's must be pointers to member functions");
 
@@ -400,7 +400,7 @@ Class<T> &Class<T>::Function(const std::string &name, F&&... f) {
 
 template<typename T>
 template<typename Getter, typename Setter>
-Class<T> &Class<T>::Property(const std::string &name, Getter &&get, Setter &&set) {
+V8B_IMPL Class<T> &Class<T>::Property(const std::string &name, Getter &&get, Setter &&set) {
     using GetterTrait = typename traits::function_traits<Getter>;
     using SetterTrait = typename traits::function_traits<Setter>;
 
@@ -458,7 +458,7 @@ Class<T> &Class<T>::Property(const std::string &name, Getter &&get, Setter &&set
 
 template<typename T>
 template<typename Getter, typename Setter>
-Class<T> &Class<T>::Indexer(Getter &&get, Setter &&set) {
+V8B_IMPL Class<T> &Class<T>::Indexer(Getter &&get, Setter &&set) {
     using GetterTrait = typename traits::function_traits<Getter>;
     using SetterTrait = typename traits::function_traits<Setter>;
 
@@ -515,7 +515,7 @@ Class<T> &Class<T>::Indexer(Getter &&get, Setter &&set) {
 
 template<typename T>
 template<typename... F>
-Class<T> &Class<T>::StaticFunction(const std::string &name, F &&... f) {
+V8B_IMPL Class<T> &Class<T>::StaticFunction(const std::string &name, F &&... f) {
     v8::HandleScope scope(class_manager.GetIsolate());
 
     class_manager.GetFunctionTemplate()->Set(
@@ -526,7 +526,7 @@ Class<T> &Class<T>::StaticFunction(const std::string &name, F &&... f) {
 }
 template<typename T>
 template<typename V>
-Class<T> &Class<T>::StaticVar(const std::string &name, V &&v) {
+V8B_IMPL Class<T> &Class<T>::StaticVar(const std::string &name, V &&v) {
     static_assert(std::is_pointer_v<V>, "V should be a pointer to variable");
 
     v8::HandleScope scope(class_manager.GetIsolate());
@@ -567,29 +567,29 @@ Class<T> &Class<T>::StaticVar(const std::string &name, V &&v) {
 }
 
 template<typename T>
-Class<T> &Class<T>::AutoWrap(bool auto_wrap) {
+V8B_IMPL Class<T> &Class<T>::AutoWrap(bool auto_wrap) {
     class_manager.SetAutoWrap(auto_wrap);
     return *this;
 }
 
 template<typename T>
-Class<T> &Class<T>::PointerAutoWrap(bool auto_wrap) {
+V8B_IMPL Class<T> &Class<T>::PointerAutoWrap(bool auto_wrap) {
     class_manager.SetPointerAutoWrap(auto_wrap);
     return *this;
 }
 
 template<typename T>
-v8::Local<v8::FunctionTemplate> Class<T>::GetFunctionTemplate() {
+V8B_IMPL v8::Local<v8::FunctionTemplate> Class<T>::GetFunctionTemplate() {
     return class_manager.GetFunctionTemplate();
 }
 
 template<typename T>
-T *Class<T>::UnwrapObject(v8::Isolate *isolate, v8::Local<v8::Value> value) {
+V8B_IMPL T *Class<T>::UnwrapObject(v8::Isolate *isolate, v8::Local<v8::Value> value) {
     return static_cast<T *>(ClassManagerPool::Get<T>(isolate).UnwrapObject(value));
 }
 
 template<typename T>
-v8::Local<v8::Object> Class<T>::WrapObject(v8::Isolate *isolate, T *ptr, bool take_ownership) {
+V8B_IMPL v8::Local<v8::Object> Class<T>::WrapObject(v8::Isolate *isolate, T *ptr, bool take_ownership) {
     if (!take_ownership) {
         return ClassManagerPool::Get<T>(isolate).WrapObject(ptr, nullptr);
     }
@@ -597,17 +597,17 @@ v8::Local<v8::Object> Class<T>::WrapObject(v8::Isolate *isolate, T *ptr, bool ta
 }
 
 template<typename T>
-v8::Local<v8::Object> Class<T>::WrapObject(v8::Isolate *isolate, T *ptr, PointerManager *pointer_manager) {
+V8B_IMPL v8::Local<v8::Object> Class<T>::WrapObject(v8::Isolate *isolate, T *ptr, PointerManager *pointer_manager) {
     return ClassManagerPool::Get<T>(isolate).WrapObject(ptr, pointer_manager);
 }
 
 template<typename T>
-void Class<T>::SetPointerManager(v8::Isolate *isolate, T *ptr, PointerManager *pointer_manager) {
+V8B_IMPL void Class<T>::SetPointerManager(v8::Isolate *isolate, T *ptr, PointerManager *pointer_manager) {
     ClassManagerPool::Get<T>(isolate).SetPointerManager(ptr, pointer_manager);
 }
 
 template<typename T>
-v8::Local<v8::Object> Class<T>::FindObject(v8::Isolate *isolate, const T &obj) {
+V8B_IMPL v8::Local<v8::Object> Class<T>::FindObject(v8::Isolate *isolate, const T &obj) {
     auto &class_manager = ClassManagerPool::Get<T>(isolate);
     try {
         return class_manager.FindObject(const_cast<T *>(&obj));
@@ -627,7 +627,7 @@ v8::Local<v8::Object> Class<T>::FindObject(v8::Isolate *isolate, const T &obj) {
 }
 
 template<typename T>
-v8::Local<v8::Object> Class<T>::FindObject(v8::Isolate *isolate, T *ptr) {
+V8B_IMPL v8::Local<v8::Object> Class<T>::FindObject(v8::Isolate *isolate, T *ptr) {
     auto &class_manager = ClassManagerPool::Get<T>(isolate);
     try {
         return class_manager.FindObject(ptr);
