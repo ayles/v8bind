@@ -238,6 +238,10 @@ decltype(auto) ToV8(v8::Isolate *isolate, T &&t) {
     return Convert<T>::ToV8(isolate, std::forward<T>(t));
 }
 
+inline decltype(auto) ToV8(v8::Isolate *isolate, const char *c) {
+    return Convert<std::string>::ToV8(isolate, std::string(c));
+}
+
 }
 
 #endif //SANDWICH_V8B_CONVERT_HPP
