@@ -155,7 +155,7 @@ private:
     template<typename T>
     static TypeInfo GetImpl() {
         constexpr size_t hash = ConstStringHash(UNIQUE_FUNCTION_ID);
-        return TypeInfo(hash);
+        return TypeInfo(hash, sizeof(T), GetName<T>());
     }
 #endif
 };
