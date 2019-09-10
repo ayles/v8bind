@@ -14,14 +14,14 @@ namespace v8b {
 
 template<typename T>
 struct DefaultBindings {
-    static bool Initialize(v8::Isolate *) {
-        return true;
+    static void Initialize(v8::Isolate *) {
+
     }
 };
 
 template<typename T>
 struct DefaultBindings<std::list<T>> {
-    static bool Initialize(v8::Isolate *isolate) {
+    static void Initialize(v8::Isolate *isolate) {
         v8b::Class<std::list<T>> c(isolate);
         c
         .Property("length", [](std::list<T> &v) {
@@ -72,7 +72,6 @@ struct DefaultBindings<std::list<T>> {
         .AutoWrap()
         .PointerAutoWrap()
         ;
-        return true;
     }
 };
 

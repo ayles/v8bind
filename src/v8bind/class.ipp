@@ -250,7 +250,11 @@ V8B_IMPL void ClassManager::EndObjectManage(void *ptr) {
 
 template<typename T>
 V8B_IMPL ClassManager &ClassManagerPool::Get(v8::Isolate *isolate) {
-    static bool initialized = DefaultBindings<T>::Initialize(isolate);
+    static bool initialized = false;
+    if (!initialized) {
+        initialized = true;
+        DefaultBindings<T>::Initialize(isolate);
+    }
     return Get(isolate, TypeInfo::Get<T>());
 }
 
@@ -312,7 +316,7 @@ V8B_IMPL void Class<T>::ObjectDestroy(v8::Isolate *isolate, void *ptr) {
 
 template<typename T>
 V8B_IMPL Class<T>::Class(v8::Isolate *isolate)
-        : class_manager(ClassManagerPool::Get(isolate, TypeInfo::Get<T>())) {
+        : class_manager(ClassManagerPool::Get<T>(isolate)) {
     class_manager.SetDestructor(ObjectDestroy);
 }
 
