@@ -11,9 +11,12 @@
 
 #include <v8.h>
 
-#include <stdexcept>
+#include <exception>
 #include <algorithm>
 #include <string>
+#include <utility>
+#include <functional>
+#include <tuple>
 
 namespace v8b {
 
