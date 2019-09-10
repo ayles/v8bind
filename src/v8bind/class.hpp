@@ -12,6 +12,8 @@
 #include <unordered_map>
 #include <type_traits>
 #include <memory>
+#include <vector>
+#include <cstddef>
 
 #define V8B_IMPL inline
 

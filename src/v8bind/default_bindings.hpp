@@ -8,6 +8,7 @@
 #include <v8bind/class.hpp>
 
 #include <list>
+#include <iterator>
 
 namespace v8b {
 
