@@ -12,6 +12,7 @@
 #include <v8.h>
 
 #include <exception>
+#include <stdexcept>
 #include <algorithm>
 #include <string>
 #include <utility>

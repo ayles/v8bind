@@ -12,6 +12,7 @@
 #include <type_traits>
 #include <string>
 #include <stdexcept>
+#include <exception>
 #include <memory>
 
 namespace v8b {

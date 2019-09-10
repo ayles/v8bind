@@ -14,6 +14,8 @@
 #include <cstring>
 #include <functional>
 #include <utility>
+#include <exception>
+#include <stdexcept>
 
 namespace v8b {
 namespace impl {
