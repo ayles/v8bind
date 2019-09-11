@@ -16,6 +16,7 @@
 #include <utility>
 #include <exception>
 #include <stdexcept>
+#include <iostream>
 
 namespace v8b {
 namespace impl {
@@ -111,11 +112,15 @@ decltype(auto) WrapFunctionImpl(F &&callable) {
         if (!traits::argument_traits<Args>::is_match(info)) {
             throw std::runtime_error("No suitable function found");
         }
-        if constexpr (std::is_same_v<O, void>) {
-            info.GetReturnValue().Set(CallFunction<R, Args>(callable, info));
+        if constexpr (traits::argument_traits<Args>::call_as_is()) {
+            std::invoke(callable, info);
         } else {
-            auto &object = FromV8<O>(info.GetIsolate(), info.This());
-            info.GetReturnValue().Set(CallFunction<R, Args>(callable, info, object));
+            if constexpr (std::is_same_v<O, void>) {
+                info.GetReturnValue().Set(CallFunction<R, Args>(callable, info));
+            } else {
+                auto &object = FromV8<O>(info.GetIsolate(), info.This());
+                info.GetReturnValue().Set(CallFunction<R, Args>(callable, info, object));
+            }
         }
     };
 }
@@ -149,7 +154,6 @@ decltype(auto) CallableFromFunction(F &&f) {
 template<typename ...FS>
 v8::Local<v8::FunctionTemplate> WrapFunction(v8::Isolate *isolate, FS&&... fs) {
     v8::EscapableHandleScope scope(isolate);
-
     std::tuple wrapped_functions(impl::WrapFunctionImpl<
             typename traits::function_traits<FS>::return_type,
             typename traits::function_traits<FS>::arguments>(

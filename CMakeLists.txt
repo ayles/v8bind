@@ -9,7 +9,11 @@ set(V8BIND_HEADERS
         src/v8bind/convert.hpp
         src/v8bind/function.hpp
         src/v8bind/type_info.hpp
-        src/v8bind/class.ipp src/v8bind/default_bindings.hpp src/v8bind/v8bind.hpp)
+        src/v8bind/class.ipp
+        src/v8bind/default_bindings.hpp
+        src/v8bind/v8bind.hpp
+        src/v8bind/module.hpp
+        src/v8bind/property.hpp)
 
 set(V8BIND_SOURCES
         src/v8bind/stub.cpp)

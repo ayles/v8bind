@@ -14,6 +14,7 @@
 #include <memory>
 #include <vector>
 #include <cstddef>
+#include <tuple>
 
 #define V8B_IMPL inline
 
@@ -165,16 +166,19 @@ public:
     template<typename ...F>
     Class &Function(const std::string &name, F&&... f);
 
-    template<typename ...F>
-    Class &StaticFunction(const std::string &name, F&&... f);
-
     template<typename V>
     Class &StaticVar(const std::string &name, V &&v);
+
+    template<typename Getter, typename Setter = std::nullptr_t>
+    Class &StaticProperty(const std::string &name, Getter &&getter, Setter &&setter = nullptr);
+
+    template<typename ...F>
+    Class &StaticFunction(const std::string &name, F&&... f);
 
     Class &AutoWrap(bool auto_wrap = true);
     Class &PointerAutoWrap(bool auto_wrap = true);
 
-    v8::Local<v8::FunctionTemplate> GetFunctionTemplate();
+    v8::Local<v8::FunctionTemplate> GetFunctionTemplate() const;
 
     static T *UnwrapObject(v8::Isolate *isolate, v8::Local<v8::Value> value);
     static v8::Local<v8::Object> WrapObject(v8::Isolate *isolate, T *ptr, bool take_ownership);
