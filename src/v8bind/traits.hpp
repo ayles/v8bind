@@ -102,10 +102,6 @@ struct argument_traits<std::tuple<>, non_strict> {
     static bool is_match(const v8::FunctionCallbackInfo<R> &info) {
         return true;
     }
-
-    static constexpr bool call_as_is() {
-        return false;
-    };
 };
 
 template<>
@@ -114,12 +110,7 @@ struct argument_traits<std::tuple<>> {
     static bool is_match(const v8::FunctionCallbackInfo<R> &info) {
         return info.Length() == 0;
     }
-
-    static constexpr bool call_as_is() {
-        return false;
-    };
 };
-
 
 // Allow bind functions with native v8 signature
 template<typename IR>
@@ -128,10 +119,6 @@ struct argument_traits<std::tuple<const v8::FunctionCallbackInfo<IR> &>, non_str
     static bool is_match(const v8::FunctionCallbackInfo<R> &info) {
         return std::is_same_v<IR, R>;
     }
-    
-    static constexpr bool call_as_is() {
-        return true;
-    };
 };
 
 template<typename IR>
@@ -140,13 +127,7 @@ struct argument_traits<std::tuple<const v8::FunctionCallbackInfo<IR> &>> {
     static bool is_match(const v8::FunctionCallbackInfo<R> &info) {
         return std::is_same_v<IR, R>;
     }
-
-    static constexpr bool call_as_is() {
-        return true;
-    };
 };
-
-
 
 template<typename A>
 struct argument_traits<std::tuple<A>, non_strict> {
@@ -154,10 +135,6 @@ struct argument_traits<std::tuple<A>, non_strict> {
     static bool is_match(const v8::FunctionCallbackInfo<R> &info, int offset = 0) {
         return Convert<std::decay_t<A>>::IsValid(info.GetIsolate(), info[offset]);
     }
-
-    static constexpr bool call_as_is() {
-        return false;
-    };
 };
 
 template<typename A>
@@ -166,10 +143,6 @@ struct argument_traits<std::tuple<A>> {
     static bool is_match(const v8::FunctionCallbackInfo<R> &info) {
         return info.Length() == 1 && argument_traits<std::tuple<A>, non_strict>::is_match(info);
     }
-
-    static constexpr bool call_as_is() {
-        return false;
-    };
 };
 
 template<typename A1, typename A2, typename ...A>
@@ -179,10 +152,6 @@ struct argument_traits<std::tuple<A1, A2, A...>, non_strict> {
         return argument_traits<std::tuple<A1>, non_strict>::is_match(info, offset) &&
                 argument_traits<std::tuple<A2, A...>, non_strict>::is_match(info, offset + 1);
     }
-
-    static constexpr bool call_as_is() {
-        return false;
-    };
 };
 
 template<typename A1, typename A2, typename ...A>
@@ -192,10 +161,6 @@ struct argument_traits<std::tuple<A1, A2, A...>> {
         return std::tuple_size_v<std::tuple<A1, A2, A...>> == info.Length() &&
                 argument_traits<std::tuple<A1, A2, A...>, non_strict>::is_match(info);
     }
-
-    static constexpr bool call_as_is() {
-        return false;
-    };
 };
 
 template<typename T>

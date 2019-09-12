@@ -59,7 +59,7 @@ public:
 
     template<typename ...F>
     Module &Function(const std::string &name, F&&... f) {
-        return Value(name, WrapFunction(isolate, std::forward<F>(f)...));
+        return Value(name, WrapFunction<StaticCall>(isolate, std::forward<F>(f)...));
     }
 
     v8::Local<v8::Object> NewInstance() const {

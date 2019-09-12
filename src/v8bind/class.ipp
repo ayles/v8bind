@@ -28,7 +28,7 @@ V8B_IMPL ClassManager::ClassManager(v8::Isolate *isolate, const v8b::TypeInfo &t
     v8::HandleScope scope(isolate);
 
     auto f = v8::FunctionTemplate::New(isolate, [](const v8::FunctionCallbackInfo<v8::Value> &args) {
-        auto self = impl::ExternalData::Unwrap<ClassManager *>(args.Data());
+        auto self = ExternalData::Unwrap<ClassManager *>(args.Data());
         try {
             if (!self->constructor_function) {
                 throw std::runtime_error("No constructor specified");
@@ -37,7 +37,7 @@ V8B_IMPL ClassManager::ClassManager(v8::Isolate *isolate, const v8b::TypeInfo &t
         } catch (const std::exception &e) {
             args.GetIsolate()->ThrowException(v8::Exception::Error(ToV8(args.GetIsolate(), std::string(e.what()))));
         }
-    }, impl::ExternalData::New(isolate, this));
+    }, ExternalData::New(isolate, this));
 
     function_template.Reset(isolate, f);
 
@@ -303,23 +303,13 @@ V8B_IMPL void ClassManagerPool::RemoveInstance(v8::Isolate *isolate) {
 
 
 
-
-template<typename T>
-template<typename... Args>
-V8B_IMPL void *Class<T>::ObjectCreate(const v8::FunctionCallbackInfo<v8::Value> &args) {
-    return CallConstructor<T, Args...>(args);
-}
-
-template<typename T>
-V8B_IMPL void Class<T>::ObjectDestroy(v8::Isolate *isolate, void *ptr) {
-    auto obj = static_cast<T *>(ptr);
-    delete obj;
-}
-
 template<typename T>
 V8B_IMPL Class<T>::Class(v8::Isolate *isolate)
         : class_manager(ClassManagerPool::Get<T>(isolate)) {
-    class_manager.SetDestructor(ObjectDestroy);
+    class_manager.SetDestructor([](v8::Isolate *isolate, void *ptr) {
+        auto obj = static_cast<T *>(ptr);
+        delete obj;
+    });
 }
 
 template<typename T>
@@ -339,9 +329,18 @@ V8B_IMPL Class<T> &Class<T>::Inherit() {
 }
 
 template<typename T>
-template<typename... Args>
+template<typename ...Args>
 V8B_IMPL Class<T> &Class<T>::Constructor() {
-    class_manager.SetConstructor(ObjectCreate<Args...>);
+    class_manager.SetConstructor([](const v8::FunctionCallbackInfo<v8::Value> &args) -> void * {
+        return CallConstructor<T, Args...>(args);
+    });
+    return *this;
+}
+
+template<typename T>
+template<typename ...F>
+V8B_IMPL Class<T> &Class<T>::Constructor(F&&... f) {
+    WrapConstructor(class_manager.GetIsolate(), std::forward<F>(f)..., class_manager.GetFunctionTemplate());
     return *this;
 }
 
@@ -407,7 +406,7 @@ V8B_IMPL Class<T> &Class<T>::Indexer(Getter &&get, Setter &&set) {
        const v8::PropertyCallbackInfo<v8::Value> &info) {
         try {
             auto obj = UnwrapObject(info.GetIsolate(), info.This());
-            auto acc = impl::ExternalData::Unwrap<decltype(accessors)>(info.Data());
+            auto acc = ExternalData::Unwrap<decltype(accessors)>(info.Data());
             info.GetReturnValue().Set(ToV8(info.GetIsolate(), std::invoke(std::get<0>(acc), *obj, index)));
         } catch (const std::exception &e) {
             info.GetIsolate()->ThrowException(v8::Exception::Error(ToV8(info.GetIsolate(), std::string(e.what()))));
@@ -420,7 +419,7 @@ V8B_IMPL Class<T> &Class<T>::Indexer(Getter &&get, Setter &&set) {
             const v8::PropertyCallbackInfo<v8::Value> &info) {
             try {
                 auto obj = UnwrapObject(info.GetIsolate(), info.This());
-                auto acc = impl::ExternalData::Unwrap<decltype(accessors)>(info.Data());
+                auto acc = ExternalData::Unwrap<decltype(accessors)>(info.Data());
                 std::invoke(std::get<1>(acc), *obj, index,
                         FromV8<std::tuple_element_t<1, typename SetterTrait::arguments>>(info.GetIsolate(), value));
             } catch (const std::exception &e) {
@@ -435,7 +434,7 @@ V8B_IMPL Class<T> &Class<T>::Indexer(Getter &&get, Setter &&set) {
             nullptr,
             nullptr,
             nullptr,
-            impl::ExternalData::New(class_manager.GetIsolate(), std::move(accessors))
+            ExternalData::New(class_manager.GetIsolate(), std::move(accessors))
     );
 
     return *this;
@@ -450,7 +449,7 @@ V8B_IMPL Class<T> &Class<T>::Function(const std::string &name, F&&... f) {
     v8::HandleScope scope(class_manager.GetIsolate());
 
     class_manager.GetFunctionTemplate()->PrototypeTemplate()->Set(ToV8(class_manager.GetIsolate(), name),
-                                                                  WrapMemberFunction(class_manager.GetIsolate(), std::forward<F>(f)...));
+            WrapFunction<MemberCall>(class_manager.GetIsolate(), std::forward<F>(f)...));
 
     return *this;
 }
@@ -462,7 +461,7 @@ V8B_IMPL Class<T> &Class<T>::StaticFunction(const std::string &name, F &&... f) 
 
     class_manager.GetFunctionTemplate()->Set(
             ToV8(class_manager.GetIsolate(), name),
-            WrapFunction(class_manager.GetIsolate(), std::forward<F>(f)...));
+            WrapFunction<StaticCall>(class_manager.GetIsolate(), std::forward<F>(f)...));
 
     return *this;
 }

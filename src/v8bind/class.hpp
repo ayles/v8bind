@@ -140,11 +140,6 @@ template<typename T>
 class Class {
     ClassManager &class_manager;
 
-    template<typename ...Args>
-    static void *ObjectCreate(const v8::FunctionCallbackInfo<v8::Value> &args);
-
-    static void ObjectDestroy(v8::Isolate *isolate, void *ptr);
-
 public:
     explicit Class(v8::Isolate *isolate);
 
@@ -153,6 +148,9 @@ public:
 
     template<typename ...Args>
     Class &Constructor();
+
+    template<typename ...F>
+    Class &Constructor(F&&... f);
 
     template<typename Member>
     Class &Var(const std::string &name, Member &&ptr);
@@ -178,6 +176,7 @@ public:
     Class &AutoWrap(bool auto_wrap = true);
     Class &PointerAutoWrap(bool auto_wrap = true);
 
+    [[nodiscard]]
     v8::Local<v8::FunctionTemplate> GetFunctionTemplate() const;
 
     static T *UnwrapObject(v8::Isolate *isolate, v8::Local<v8::Value> value);
