@@ -98,7 +98,7 @@ V8B_IMPL AccessorData PropertyAccessor(v8::Isolate *isolate, Getter &&get, Sette
 
     v8::AccessorSetterCallback setter = nullptr;
     auto attribute = v8::PropertyAttribute(v8::DontDelete | v8::ReadOnly);
-    if constexpr (!std::is_same_v<Setter, nullptr_t>) {
+    if constexpr (!std::is_same_v<Setter, std::nullptr_t>) {
         setter = [](v8::Local<v8::String> property, v8::Local<v8::Value> value,
                     const v8::PropertyCallbackInfo<void> &info) {
             try {

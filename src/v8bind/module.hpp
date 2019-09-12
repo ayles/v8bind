@@ -48,7 +48,7 @@ public:
         return *this;
     }
 
-    template<typename Getter, typename Setter = nullptr_t>
+    template<typename Getter, typename Setter = std::nullptr_t>
     Module &Property(const std::string &name, Getter &&get, Setter &&set = nullptr) {
         auto data = impl::PropertyAccessor<false, Getter, Setter>(
                 isolate, std::forward<Getter>(get), std::forward<Setter>(set));

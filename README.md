@@ -14,6 +14,7 @@ Can work without **RTTI**.
 
 - Microsoft Visual C++ 2019 (Windows 10)
 - GCC 7.4 and 8.3 (Ubuntu 18.04)
+- Clang 6 (Ubuntu 18.04) 
 
 ## Example
 

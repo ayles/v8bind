@@ -414,7 +414,7 @@ V8B_IMPL Class<T> &Class<T>::Indexer(Getter &&get, Setter &&set) {
     };
 
     v8::IndexedPropertySetterCallback setter = nullptr;
-    if constexpr (!std::is_same_v<Setter, nullptr_t>) {
+    if constexpr (!std::is_same_v<Setter, std::nullptr_t>) {
         setter = [](uint32_t index, v8::Local<v8::Value> value,
             const v8::PropertyCallbackInfo<v8::Value> &info) {
             try {
