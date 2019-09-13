@@ -187,7 +187,7 @@ void SelectAndCall(
     if constexpr (index < std::tuple_size_v<std::tuple<FS...>>) {
         try {
             CallNativeFromV8<CallType>(std::get<index>(functions), info);
-        } catch (const std::exception &e) {
+        } catch (const std::exception &) {
             SelectAndCall<CallType, index + 1>(info, functions);
         }
     } else {

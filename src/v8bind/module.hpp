@@ -30,7 +30,7 @@ public:
     }
 
     template<typename T>
-    Module &Class(const std::string &name, const Class<T> &cl) {
+    Module &Class(const std::string &name, const v8b::Class<T> &cl) {
         cl.GetFunctionTemplate()->SetClassName(ToV8(isolate, name));
         return Value(name, cl.GetFunctionTemplate(),
                 v8::PropertyAttribute(v8::DontDelete | v8::ReadOnly));

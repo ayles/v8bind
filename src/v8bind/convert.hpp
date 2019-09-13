@@ -154,7 +154,7 @@ struct Convert<T *, typename std::enable_if_t<IsWrappedClass<T>::value>> {
         }
         try {
             Class<std::remove_cv_t<T>>::UnwrapObject(isolate, value);
-        } catch (const std::exception &e) {
+        } catch (const std::exception &) {
             return false;
         }
         return true;
