@@ -37,6 +37,12 @@ struct function_traits<R(Args...)> {
 template<typename R, typename ...Args>
 struct function_traits<R (*)(Args...)> : function_traits<R(Args...)> {};
 
+// function const pointer
+template<typename R, typename ...Args>
+struct function_traits<R (* const)(Args...)> : function_traits<R(Args...)> {
+    using pointer_type = R (* const)(Args...);
+};
+
 // member function pointer
 template<typename C, typename R, typename ...Args>
 struct function_traits<R (C::*)(Args...)> : function_traits<R(C &, Args...)> {

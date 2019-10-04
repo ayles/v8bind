@@ -406,7 +406,7 @@ V8B_IMPL Class<T> &Class<T>::Indexer(Getter &&get, Setter &&set) {
        const v8::PropertyCallbackInfo<v8::Value> &info) {
         try {
             auto obj = UnwrapObject(info.GetIsolate(), info.This());
-            auto acc = ExternalData::Unwrap<decltype(accessors)>(info.Data());
+            decltype(auto) acc = ExternalData::Unwrap<decltype(accessors)>(info.Data());
             info.GetReturnValue().Set(ToV8(info.GetIsolate(), std::invoke(std::get<0>(acc), *obj, index)));
         } catch (const std::exception &e) {
             info.GetIsolate()->ThrowException(v8::Exception::Error(ToV8(info.GetIsolate(), std::string(e.what()))));
@@ -419,7 +419,7 @@ V8B_IMPL Class<T> &Class<T>::Indexer(Getter &&get, Setter &&set) {
             const v8::PropertyCallbackInfo<v8::Value> &info) {
             try {
                 auto obj = UnwrapObject(info.GetIsolate(), info.This());
-                auto acc = ExternalData::Unwrap<decltype(accessors)>(info.Data());
+                decltype(auto) acc = ExternalData::Unwrap<decltype(accessors)>(info.Data());
                 std::invoke(std::get<1>(acc), *obj, index,
                         FromV8<std::tuple_element_t<1, typename SetterTrait::arguments>>(info.GetIsolate(), value));
             } catch (const std::exception &e) {

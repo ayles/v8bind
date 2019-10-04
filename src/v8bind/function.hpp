@@ -113,7 +113,7 @@ decltype(auto) CallNativeFromV8Impl(F &&f, const v8::FunctionCallbackInfo<v8::Va
             return std::invoke(std::forward<F>(f),
                         FromV8<std::tuple_element_t<Indices, Arguments>>(info.GetIsolate(), info[Indices])...);
         } else {
-            auto result = std::invoke(std::forward<F>(f),
+            decltype(auto) result = std::invoke(std::forward<F>(f),
                                       FromV8<std::tuple_element_t<Indices, Arguments>>(
                                               info.GetIsolate(), info[Indices])...);
             if constexpr (wrap_return_value) {
@@ -122,7 +122,7 @@ decltype(auto) CallNativeFromV8Impl(F &&f, const v8::FunctionCallbackInfo<v8::Va
             return result;
         }
     } else if (std::is_same_v<CallType, MemberCall>) {
-        auto object = FromV8<std::tuple_element_t<0, Arguments>>(info.GetIsolate(), info.This());
+        decltype(auto) object = FromV8<std::tuple_element_t<0, Arguments>>(info.GetIsolate(), info.This());
 
         if constexpr (std::tuple_size_v<Arguments> == 2) {
             if constexpr (
@@ -135,7 +135,7 @@ decltype(auto) CallNativeFromV8Impl(F &&f, const v8::FunctionCallbackInfo<v8::Va
             return std::invoke(std::forward<F>(f), object,
                         FromV8<std::tuple_element_t<Indices + 1, Arguments>>(info.GetIsolate(), info[Indices])...);
         } else {
-            auto result = std::invoke(std::forward<F>(f), object,
+            decltype(auto) result = std::invoke(std::forward<F>(f), object,
                                       FromV8<std::tuple_element_t<Indices + 1, Arguments>>(
                                               info.GetIsolate(), info[Indices])...);
             if constexpr (wrap_return_value) {

@@ -79,7 +79,7 @@ V8B_IMPL AccessorData PropertyAccessor(v8::Isolate *isolate, Getter &&get, Sette
 
     auto getter = [](v8::Local<v8::String> property, const v8::PropertyCallbackInfo<v8::Value> &info) {
         try {
-            auto acc = ExternalData::Unwrap<decltype(accessors)>(info.Data());
+            decltype(auto) acc = ExternalData::Unwrap<decltype(accessors)>(info.Data());
             if constexpr (is_member) {
                 static_assert(std::tuple_size_v<typename GetterTrait::arguments> == 1,
                               "Getter function must have no arguments");
@@ -102,7 +102,7 @@ V8B_IMPL AccessorData PropertyAccessor(v8::Isolate *isolate, Getter &&get, Sette
         setter = [](v8::Local<v8::String> property, v8::Local<v8::Value> value,
                     const v8::PropertyCallbackInfo<void> &info) {
             try {
-                auto acc = ExternalData::Unwrap<decltype(accessors)>(info.Data());
+                decltype(auto) acc = ExternalData::Unwrap<decltype(accessors)>(info.Data());
                 if constexpr (is_member) {
                     static_assert(std::tuple_size_v<typename SetterTrait::arguments> == 2,
                                   "Setter function must have 1 argument");

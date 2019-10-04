@@ -19,7 +19,7 @@ set(V8BIND_SOURCES
         src/v8bind/stub.cpp)
 
 if (NOT DEFINED V8_INCLUDE_DIR)
-    message(FATAL_ERROR "V8_INCLUDE_DIRECTORY not set")
+    message(FATAL_ERROR "V8_INCLUDE_DIR not set")
 endif ()
 
 add_library(v8bind STATIC ${V8BIND_HEADERS} ${V8BIND_SOURCES})
