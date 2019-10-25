@@ -83,7 +83,7 @@ V8B_IMPL AccessorData PropertyAccessor(v8::Isolate *isolate, Getter &&get, Sette
             if constexpr (is_member) {
                 static_assert(std::tuple_size_v<typename GetterTrait::arguments> == 1,
                               "Getter function must have no arguments");
-                using ClassType = std::decay_t<std::tuple_element_t<0, typename GetterTrait::arguments>>;
+                using ClassType = typename std::decay<typename std::tuple_element<0, typename GetterTrait::arguments>::type>::type;
                 auto obj = Class<ClassType>::UnwrapObject(info.GetIsolate(), info.This());
                 info.GetReturnValue().Set(ToV8(info.GetIsolate(), std::invoke(std::get<0>(acc), *obj)));
             } else {
