@@ -83,6 +83,27 @@ struct Convert<T, std::enable_if_t<std::is_floating_point_v<T> || std::is_integr
     }
 };
 
+template<typename T>
+struct Convert<T, std::enable_if_t<std::is_enum_v<T>>> {
+    using CType = T;
+    using V8Type = v8::Local<v8::Number>;
+
+    static bool IsValid(v8::Isolate *, v8::Local<v8::Value> value) {
+        return !value.IsEmpty() && value->IsNumber();
+    }
+
+    static CType FromV8(v8::Isolate *isolate, v8::Local<v8::Value> value) {
+        if (!IsValid(isolate, value)) {
+            throw std::runtime_error("Value is not a valid number");
+        }
+        return static_cast<T>(value.As<v8::Number>()->Value());
+    }
+
+    static V8Type ToV8(v8::Isolate *isolate, CType value) {
+        return v8::Number::New(isolate, static_cast<double>(value));
+    }
+};
+
 template<typename Char, typename Traits, typename Alloc>
 struct Convert<std::basic_string<Char, Traits, Alloc>> {
     static_assert(sizeof(Char) <= sizeof(uint16_t),

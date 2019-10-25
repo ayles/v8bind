@@ -152,6 +152,12 @@ public:
     template<typename ...F>
     Class &Constructor(F&&... f);
 
+    template<typename U>
+    Class &Subclass(const std::string &name, const v8b::Class<U> &cl);
+
+    template<typename Data>
+    Class &Value(const std::string &name, v8::Local<Data> value, v8::PropertyAttribute attribute = v8::None);
+
     template<typename Member>
     Class &Var(const std::string &name, Member &&ptr);
 
@@ -163,6 +169,9 @@ public:
 
     template<typename ...F>
     Class &Function(const std::string &name, F&&... f);
+
+    template<typename Data>
+    Class &StaticValue(const std::string &name, v8::Local<Data> value, v8::PropertyAttribute attribute = v8::None);
 
     template<typename V>
     Class &StaticVar(const std::string &name, V &&v);
