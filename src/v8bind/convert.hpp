@@ -96,11 +96,11 @@ struct Convert<T, std::enable_if_t<std::is_enum_v<T>>> {
         if (!IsValid(isolate, value)) {
             throw std::runtime_error("Value is not a valid number");
         }
-        return static_cast<T>(value.As<v8::Number>()->Value());
+        return static_cast<T>(std::underlying_type_t<T>(value.As<v8::Number>()->Value()));
     }
 
     static V8Type ToV8(v8::Isolate *isolate, CType value) {
-        return v8::Number::New(isolate, static_cast<double>(value));
+        return v8::Number::New(isolate, static_cast<double>(std::underlying_type_t<T>(value)));
     }
 };
 
