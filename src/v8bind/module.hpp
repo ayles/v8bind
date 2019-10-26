@@ -22,22 +22,31 @@ public:
         object.Reset(isolate, v8::ObjectTemplate::New(isolate));
     }
 
-    template<typename Data>
-    Module &Value(const std::string &name, v8::Local<Data> value,
-            v8::PropertyAttribute attribute = v8::None) {
-        object.Get(isolate)->Set(ToV8(isolate, name), value, attribute);
+    template<typename T>
+    Module &Value(const std::string &name, T &&value) {
+        object.Get(isolate)->Set(ToV8(isolate, name),
+                ToV8(isolate, std::forward<T>(value)),
+                v8::PropertyAttribute(v8::PropertyAttribute::DontDelete));
+        return *this;
+    }
+
+    template<typename T>
+    Module &Const(const std::string &name, T &&value) {
+        object.Get(isolate)->Set(ToV8(isolate, name),
+                                 ToV8(isolate, std::forward<T>(value)),
+                                 v8::PropertyAttribute(
+                                         v8::PropertyAttribute::DontDelete | v8::PropertyAttribute::ReadOnly));
         return *this;
     }
 
     template<typename T>
     Module &Class(const std::string &name, const v8b::Class<T> &cl) {
         cl.GetFunctionTemplate()->SetClassName(ToV8(isolate, name));
-        return Value(name, cl.GetFunctionTemplate(),
-                v8::PropertyAttribute(v8::DontDelete | v8::ReadOnly));
+        return Const(name, cl.GetFunctionTemplate());
     }
 
-    Module &Submodule(const std::string &name, Module &module) {
-        return Value(name, module.object.Get(module.isolate));
+    Module &SubModule(const std::string &name, Module &module) {
+        return Const(name, module.object.Get(module.isolate));
     }
 
     template<typename V>

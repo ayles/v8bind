@@ -21,7 +21,6 @@
 namespace v8b {
 
 class PointerManager {
-public:
     friend class ClassManager;
 
 protected:
@@ -85,6 +84,7 @@ public:
     [[nodiscard]]
     v8::Isolate *GetIsolate() const;
 
+protected:
     void EndObjectManage(void *ptr) override;
 
 private:
@@ -143,20 +143,26 @@ class Class {
 public:
     explicit Class(v8::Isolate *isolate);
 
+    // Set this as inherited from B
     template<typename B>
     Class &Inherit();
 
+    // Set constructor signatures as tuples of arguments
     template<typename ...Args>
     Class &Constructor();
 
+    // Set factory functions
     template<typename ...F>
     Class &Constructor(F&&... f);
 
     template<typename U>
-    Class &Subclass(const std::string &name, const v8b::Class<U> &cl);
+    Class &InnerClass(const std::string &name, const v8b::Class<U> &cl);
 
-    template<typename Data>
-    Class &Value(const std::string &name, v8::Local<Data> value, v8::PropertyAttribute attribute = v8::None);
+    template<typename U>
+    Class &Value(const std::string &name, U &&value);
+
+    template<typename U>
+    Class &Const(const std::string &name, U &&value);
 
     template<typename Member>
     Class &Var(const std::string &name, Member &&ptr);
@@ -170,8 +176,11 @@ public:
     template<typename ...F>
     Class &Function(const std::string &name, F&&... f);
 
-    template<typename Data>
-    Class &StaticValue(const std::string &name, v8::Local<Data> value, v8::PropertyAttribute attribute = v8::None);
+    template<typename U>
+    Class &StaticValue(const std::string &name, U &&value);
+
+    template<typename U>
+    Class &StaticConst(const std::string &name, U &&value);
 
     template<typename V>
     Class &StaticVar(const std::string &name, V &&v);

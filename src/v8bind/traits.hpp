@@ -69,6 +69,55 @@ struct function_traits<R (C::* const)(Args...) const> : function_traits<R (const
     using pointer_type = R (C::* const)(Args...) const;
 };
 
+#if defined(__cpp_noexcept_function_type) || __cplusplus >= 201703L
+
+// function noexcept
+template<typename R, typename ...Args>
+struct function_traits<R(Args...) noexcept> {
+    using return_type = R;
+    using arguments = std::tuple<Args...>;
+    using pointer_type = R (*)(Args...) noexcept;
+};
+
+// function noexcept pointer
+template<typename R, typename ...Args>
+struct function_traits<R (*)(Args...) noexcept> : function_traits<R(Args...) noexcept> {};
+
+// function const noexcept pointer
+template<typename R, typename ...Args>
+struct function_traits<R (* const)(Args...) noexcept> : function_traits<R(Args...) noexcept> {
+    using pointer_type = R (* const)(Args...) noexcept;
+};
+
+// member function noexcept pointer
+template<typename C, typename R, typename ...Args>
+struct function_traits<R (C::*)(Args...) noexcept> : function_traits<R(C &, Args...) noexcept> {
+    using class_type = C;
+    using pointer_type = R (C::*)(Args...) noexcept;
+};
+
+// member function const pointer
+template<typename C, typename R, typename ...Args>
+struct function_traits<R (C::* const)(Args...) noexcept> : function_traits<R(C &, Args...) noexcept> {
+    using class_type = C;
+    using pointer_type = R (C::* const)(Args...) noexcept;
+};
+
+
+// const member function noexcept pointer
+template<typename C, typename R, typename ...Args>
+struct function_traits<R (C::*)(Args...) const noexcept> : function_traits<R (const C &, Args...) noexcept> {
+    using pointer_type = R (C::*)(Args...) const noexcept;
+};
+
+// const member function const noexcept pointer
+template<typename C, typename R, typename ...Args>
+struct function_traits<R (C::* const)(Args...) const noexcept> : function_traits<R (const C &, Args...) noexcept> {
+    using pointer_type = R (C::* const)(Args...) const noexcept;
+};
+
+#endif
+
 // function object, lambda
 template<typename F>
 struct function_traits {

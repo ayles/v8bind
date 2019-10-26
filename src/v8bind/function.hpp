@@ -148,6 +148,22 @@ decltype(auto) CallNativeFromV8Impl(F &&f, const v8::FunctionCallbackInfo<v8::Va
 
 } // namespace impl
 
+// Call any V8 function from C++ with arguments conversion
+template<typename ...Args>
+v8::Local<v8::Value> CallV8FromNative(v8::Isolate *isolate,
+        v8::Local<v8::Value> f, v8::Local<v8::Value> recv, Args&&... args) {
+    v8::EscapableHandleScope scope(isolate);
+
+    if (f.IsEmpty() || !f->IsFunction()) throw std::runtime_error("F is not a function");
+    auto ff = f.As<v8::Function>();
+
+    std::vector<v8::Local<v8::Value>> converted_args { ToV8(isolate, std::forward<Args>(args))... };
+
+    return scope.Escape(
+            ff->Call(isolate->GetCurrentContext(),
+                    recv, int(converted_args.size()), converted_args.data()).ToLocalChecked());
+}
+
 // Call any C++ function with arguments conversion from V8
 // Returned value will be converted back to V8 and passed to info return value
 // Also return value will be returned as result of executing this function

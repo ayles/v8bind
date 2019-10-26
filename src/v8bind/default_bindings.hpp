@@ -9,6 +9,7 @@
 
 #include <list>
 #include <iterator>
+#include <type_traits>
 
 namespace v8b {
 
@@ -20,39 +21,33 @@ struct DefaultBindings {
 };
 
 template<typename T>
-struct DefaultBindings<std::list<T>> {
+struct DefaultBindings<std::vector<T>> {
     static void Initialize(v8::Isolate *isolate) {
-        v8b::Class<std::list<T>> c(isolate);
+        v8b::Class<std::vector<T>> c(isolate);
+
         c
-        .Property("length", [](std::list<T> &v) {
-            return v.size();
-        })
-        .Indexer([](std::list<T> &v, uint32_t index) {
+        .Property("length", &std::vector<T>::size)
+        .Indexer([](std::vector<T> &v, uint32_t index) {
             if (index >= v.size()) {
                 throw std::out_of_range("Index out of range");
             }
-            auto it = v.begin();
-            std::advance(it, index);
-            return *it;
-        }, [](std::list<T> &v, uint32_t index, const T &value) {
-            if (index >= v.size()) {
-                throw std::out_of_range("Index out of range");
-            }
-            auto it = v.begin();
-            std::advance(it, index);
-            *it = value;
+            return v[index];
+        }, [](std::vector<T> &v, uint32_t index, const T &value) {
+
         })
-        .Function("push", [](std::list<T> &v, const T &value) {
+        .Function("push", [](std::vector<T> &v, const T &value) {
             v.emplace_back(value);
             return v.size();
         })
-        .Function("pop", [](std::list<T> &v) {
+        .Function("pop", [](std::vector<T> &v) {
             if (v.empty()) {
-                throw std::out_of_range("Can't pop from empty list");
+                throw std::out_of_range("Can't pop from empty vector");
             }
-            return *std::prev(v.end());
+            decltype(auto) val = v[v.size() - 1];
+            v.resize(v.size() - 1);
+            return val;
         })
-        .Function("splice", [](std::list<T> &v, uint32_t start_index, uint32_t count) {
+        /*.Function("splice", [](std::vector<T> &v, uint32_t start_index, uint32_t count) {
             if (start_index + count < v.size()) {
                 throw std::out_of_range("Can't splice " +
                     std::to_string(count) + " elements from index " + std::to_string(start_index) +
@@ -62,12 +57,12 @@ struct DefaultBindings<std::list<T>> {
             std::advance(begin, start_index);
             auto end = begin;
             std::advance(end, count);
-            std::list<T> ret;
+            std::vector<T> ret;
             ret.splice(ret.begin(), ret, begin, end);
             return ret;
-        })
-        .Function("toString", [](std::list<T> &v) {
-            return std::string("[list of ") + std::to_string(v.size()) + " " + TypeInfo::Get<T>().GetName() + "]";
+        })*/
+        .Function("toString", [](std::vector<T> &v) {
+            return std::string("[native vector of ") + std::to_string(v.size()) + " " + TypeInfo::Get<T>().GetName() + "]";
         })
         .AutoWrap()
         .PointerAutoWrap()
