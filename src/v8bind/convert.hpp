@@ -6,6 +6,7 @@
 #define SANDWICH_V8B_CONVERT_HPP
 
 #include <v8bind/class.hpp>
+#include <v8bind/traits.hpp>
 
 #include <v8.h>
 
@@ -176,6 +177,19 @@ struct Convert<T *, typename std::enable_if_t<IsWrappedClass<T>::value>> {
         try {
             Class<std::remove_cv_t<T>>::UnwrapObject(isolate, value);
         } catch (const std::exception &) {
+            // JS array converting
+            if constexpr (traits::is_vector_v<std::remove_cv_t<T>>) {
+                if (value->IsArray()) {
+                    auto obj = value.As<v8::Array>();
+                    auto context = isolate->GetCurrentContext();
+                    T *vec = new T;
+                    for (unsigned int i = 0; i < obj->Length(); ++i) {
+                        vec->emplace_back(Convert<typename T::value_type>::FromV8(isolate, (obj->Get(context, i).ToLocalChecked())));
+                    }
+                    obj->SetPrototype(context, Class<std::remove_cv_t<T>>::WrapObject(isolate, vec, true));
+                    return true;
+                }
+            }
             return false;
         }
         return true;
@@ -203,10 +217,7 @@ struct Convert<T, typename std::enable_if_t<IsWrappedClass<T>::value>> {
     }
 
     static CType FromV8(v8::Isolate *isolate, v8::Local<v8::Value> value) {
-        if (!IsValid(isolate, value)) {
-            throw std::runtime_error("Value is not a valid object");
-        }
-        auto ptr = Class<std::remove_cv_t<T>>::UnwrapObject(isolate, value);
+        auto ptr = Convert<T *>::FromV8(isolate, value);
         if (!ptr) {
             throw std::runtime_error("Failed to unwrap object");
         }

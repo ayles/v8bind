@@ -7,7 +7,7 @@
 
 #include <v8bind/class.hpp>
 #include <v8bind/convert.hpp>
-#include <v8bind/traits.hpp>
+#include <v8bind/argument_traits.hpp>
 
 #include <v8.h>
 
@@ -159,9 +159,12 @@ v8::Local<v8::Value> CallV8FromNative(v8::Isolate *isolate,
 
     std::vector<v8::Local<v8::Value>> converted_args { ToV8(isolate, std::forward<Args>(args))... };
 
-    return scope.Escape(
-            ff->Call(isolate->GetCurrentContext(),
-                    recv, int(converted_args.size()), converted_args.data()).ToLocalChecked());
+    v8::Local<v8::Value> result;
+
+    auto r = ff->Call(isolate->GetCurrentContext(),
+             recv, int(converted_args.size()), converted_args.data()).ToLocal(&result);
+
+    return scope.Escape(result);
 }
 
 // Call any C++ function with arguments conversion from V8

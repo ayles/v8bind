@@ -185,6 +185,11 @@ V8B_IMPL void *ClassManager::UnwrapObject(v8::Local<v8::Value> value) {
 
     auto obj = value.As<v8::Object>();
 
+    // Auto wrapped array unwrapping
+    if (obj->IsArray()) {
+        obj = obj->GetPrototype().As<v8::Object>();
+    }
+
     if (obj->InternalFieldCount() != 2) {
         throw std::runtime_error("Object internal field count != 2");
     }
@@ -303,7 +308,12 @@ V8B_IMPL void ClassManagerPool::RemoveInstance(v8::Isolate *isolate) {
 
 template<typename T>
 V8B_IMPL Class<T>::Class(v8::Isolate *isolate)
-        : class_manager(ClassManagerPool::Get<T>(isolate)) {}
+        : class_manager(ClassManagerPool::Get<T>(isolate)) {
+    class_manager.SetDestructor([](v8::Isolate *isolate, void *ptr) {
+        auto obj = static_cast<T *>(ptr);
+        delete obj;
+    });
+}
 
 template<typename T>
 template<typename B>
@@ -327,10 +337,6 @@ V8B_IMPL Class<T> &Class<T>::Constructor() {
     class_manager.SetConstructor([](const v8::FunctionCallbackInfo<v8::Value> &args) -> void * {
         return CallConstructor<T, Args...>(args);
     });
-    class_manager.SetDestructor([](v8::Isolate *isolate, void *ptr) {
-        auto obj = static_cast<T *>(ptr);
-        delete obj;
-    });
     return *this;
 }
 
@@ -338,10 +344,6 @@ template<typename T>
 template<typename ...F>
 V8B_IMPL Class<T> &Class<T>::Constructor(F&&... f) {
     WrapConstructor(class_manager.GetIsolate(), std::forward<F>(f)..., class_manager.GetFunctionTemplate());
-    class_manager.SetDestructor([](v8::Isolate *isolate, void *ptr) {
-        auto obj = static_cast<T *>(ptr);
-        delete obj;
-    });
     return *this;
 }
 
