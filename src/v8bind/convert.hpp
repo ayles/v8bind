@@ -12,9 +12,12 @@
 
 #include <type_traits>
 #include <string>
+#include <string_view>
 #include <stdexcept>
 #include <exception>
 #include <memory>
+#include <locale>
+#include <codecvt>
 
 namespace v8b {
 
@@ -107,8 +110,8 @@ struct Convert<T, std::enable_if_t<std::is_enum_v<T>>> {
 
 template<typename Char, typename Traits, typename Alloc>
 struct Convert<std::basic_string<Char, Traits, Alloc>> {
-    static_assert(sizeof(Char) <= sizeof(uint16_t),
-                  "Only UTF-8 and UTF-16 strings are supported");
+    static_assert(sizeof(Char) <= sizeof(uint32_t),
+                  "Only UTF-8, UTF-16 and UTF-32 strings are supported");
 
     using CType = std::basic_string<Char, Traits, Alloc>;
     using V8Type = v8::Local<v8::String>;
@@ -123,31 +126,53 @@ struct Convert<std::basic_string<Char, Traits, Alloc>> {
         }
         if constexpr (sizeof(Char) == 1) {
             const v8::String::Utf8Value str(isolate, value);
-            return CType(reinterpret_cast<const Char *>(*str), str.length());
-        } else {
+            return CType(reinterpret_cast<const Char *>(*str));
+        } else if constexpr (sizeof(Char) == 2) {
             const v8::String::Value str(isolate, value);
-            return CType(reinterpret_cast<const Char *>(*str), str.length());
+            return CType(reinterpret_cast<const Char *>(*str));
+        } else if constexpr (sizeof(Char) == 4) {
+            const v8::String::Utf8Value str(isolate, value);
+            std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> cvt;
+            return cvt.from_bytes(*str);
         }
     }
 
     static V8Type ToV8(v8::Isolate* isolate, const CType &value) {
         if constexpr (sizeof(Char) == 1) {
             return v8::String::NewFromUtf8(
-                    isolate,
-                    reinterpret_cast<const char *>(value.data()),
-                    v8::NewStringType::kNormal,
-                    static_cast<int>(value.size())
+                isolate,
+                reinterpret_cast<const char *>(value.data()),
+                v8::NewStringType::kNormal,
+                static_cast<int>(value.size())
             ).ToLocalChecked();
-        } else {
+        } else if constexpr (sizeof(Char) == 2) {
             return v8::String::NewFromTwoByte(
-                    isolate,
-                    reinterpret_cast<uint16_t const*>(value.data()),
-                    v8::NewStringType::kNormal,
-                    static_cast<int>(value.size())
+                isolate,
+                reinterpret_cast<uint16_t const*>(value.data()),
+                v8::NewStringType::kNormal,
+                static_cast<int>(value.size())
+            ).ToLocalChecked();
+        } else if constexpr (sizeof(Char) == 4) {
+            std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> cvt;
+            auto str = cvt.to_bytes(value.data());
+            return v8::String::NewFromUtf8(
+                isolate,
+                reinterpret_cast<const char *>(str.data()),
+                v8::NewStringType::kNormal,
+                static_cast<int>(str.size())
             ).ToLocalChecked();
         }
     }
 };
+
+template<>
+struct Convert<const char *> : Convert<std::string> {};
+
+template<>
+struct Convert<const char16_t *> : Convert<std::u16string> {};
+
+template<>
+struct Convert<const char32_t *> : Convert<std::u32string> {};
 
 template<typename T>
 struct IsWrappedClass : std::is_class<T> {};
@@ -157,6 +182,9 @@ struct IsWrappedClass<v8::Local<T>> : std::false_type {};
 
 template<typename T>
 struct IsWrappedClass<v8::Global<T>> : std::false_type {};
+
+template<typename Char, typename Traits>
+struct IsWrappedClass<std::basic_string_view<Char, Traits>> : std::false_type {};
 
 template<typename Char, typename Traits, typename Alloc>
 struct IsWrappedClass<std::basic_string<Char, Traits, Alloc>> : std::false_type {};
@@ -274,6 +302,14 @@ decltype(auto) ToV8(v8::Isolate *isolate, T &&t) {
 
 inline decltype(auto) ToV8(v8::Isolate *isolate, const char *c) {
     return Convert<std::string>::ToV8(isolate, std::string(c));
+}
+
+inline decltype(auto) ToV8(v8::Isolate *isolate, const char16_t *c) {
+    return Convert<std::u16string>::ToV8(isolate, std::u16string(c));
+}
+
+inline decltype(auto) ToV8(v8::Isolate *isolate, const char32_t *c) {
+    return Convert<std::u32string>::ToV8(isolate, std::u32string(c));
 }
 
 }
