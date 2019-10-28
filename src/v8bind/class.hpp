@@ -56,7 +56,7 @@ public:
     void RemoveObjects();
 
     v8::Local<v8::Object> FindObject(void *ptr) const;
-    v8::Local<v8::Object> WrapObject(void *ptr);
+    v8::Local<v8::Object> WrapObject(void *ptr, bool take_ownership);
     v8::Local<v8::Object> WrapObject(void *ptr, PointerManager *pointer_manager);
     void SetPointerManager(void *ptr, PointerManager *pointer_manager);
 
@@ -72,14 +72,9 @@ public:
     void SetDestructor(DestructorFunction destructor_function);
 
     void SetAutoWrap(bool auto_wrap = true);
-    // Pointer auto wrap is almost newer required so use it with caution
-    void SetPointerAutoWrap(bool auto_wrap = true);
 
     [[nodiscard]]
     bool IsAutoWrapEnabled() const;
-
-    [[nodiscard]]
-    bool IsPointerAutoWrapEnabled() const;
 
     [[nodiscard]]
     v8::Isolate *GetIsolate() const;
@@ -115,7 +110,6 @@ private:
     std::vector<ClassManager *> derived_class_managers;
 
     bool auto_wrap;
-    bool pointer_auto_wrap;
 };
 
 class ClassManagerPool {
@@ -192,7 +186,6 @@ public:
     Class &StaticFunction(const std::string &name, F&&... f);
 
     Class &AutoWrap(bool auto_wrap = true);
-    Class &PointerAutoWrap(bool auto_wrap = true);
 
     [[nodiscard]]
     v8::Local<v8::FunctionTemplate> GetFunctionTemplate() const;
@@ -201,7 +194,6 @@ public:
     static v8::Local<v8::Object> WrapObject(v8::Isolate *isolate, T *ptr, bool take_ownership);
     static v8::Local<v8::Object> WrapObject(v8::Isolate *isolate, T *ptr, PointerManager *pointer_manager);
     static v8::Local<v8::Object> FindObject(v8::Isolate *isolate, T *ptr);
-    static v8::Local<v8::Object> FindObject(v8::Isolate *isolate, const T &obj);
     static void SetPointerManager(v8::Isolate *isolate, T *ptr, PointerManager *pointerManager);
 
 private:

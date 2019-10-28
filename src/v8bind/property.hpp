@@ -33,7 +33,7 @@ V8B_IMPL AccessorData VarAccessor(v8::Isolate *isolate, V &&var) {
                 static_assert(std::is_pointer_v<V>, "V should be a pointer to variable");
                 info.GetReturnValue().Set(ToV8(info.GetIsolate(), *v));
             }
-        } catch (const std::exception &e) {
+        } catch (const V8BindException &e) {
             info.GetIsolate()->ThrowException(v8::Exception::Error(ToV8(info.GetIsolate(), e.what())));
         }
     };
@@ -55,7 +55,7 @@ V8B_IMPL AccessorData VarAccessor(v8::Isolate *isolate, V &&var) {
                 } else {
                     *v = FromV8<std::remove_pointer_t<V>>(info.GetIsolate(), value);
                 }
-            } catch (const std::exception &e) {
+            } catch (const V8BindException &e) {
                 info.GetIsolate()->ThrowException(v8::Exception::Error(ToV8(info.GetIsolate(), e.what())));
             }
         };
@@ -91,7 +91,7 @@ V8B_IMPL AccessorData PropertyAccessor(v8::Isolate *isolate, Getter &&get, Sette
                               "Getter function must have no arguments");
                 info.GetReturnValue().Set(ToV8(info.GetIsolate(), std::invoke(std::get<0>(acc))));
             }
-        } catch (const std::exception &e) {
+        } catch (const V8BindException &e) {
             info.GetIsolate()->ThrowException(v8::Exception::Error(ToV8(info.GetIsolate(), e.what())));
         }
     };
@@ -118,7 +118,7 @@ V8B_IMPL AccessorData PropertyAccessor(v8::Isolate *isolate, Getter &&get, Sette
                                 FromV8<std::tuple_element_t<0, typename SetterTrait::arguments>>(info.GetIsolate(),
                                                                                                  value));
                 }
-            } catch (const std::exception &e) {
+            } catch (const V8BindException &e) {
                 info.GetIsolate()->ThrowException(v8::Exception::Error(ToV8(info.GetIsolate(), e.what())));
             }
         };

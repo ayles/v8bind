@@ -20,7 +20,7 @@ struct DefaultBindings {
     }
 };
 
-template<typename T>
+/*template<typename T>
 struct DefaultBindings<std::vector<T>> {
     static void Initialize(v8::Isolate *isolate) {
         v8b::Class<std::vector<T>> c(isolate);
@@ -47,7 +47,7 @@ struct DefaultBindings<std::vector<T>> {
             v.resize(v.size() - 1);
             return val;
         })
-        /*.Function("splice", [](std::vector<T> &v, uint32_t start_index, uint32_t count) {
+        *//*.Function("splice", [](std::vector<T> &v, uint32_t start_index, uint32_t count) {
             if (start_index + count < v.size()) {
                 throw std::out_of_range("Can't splice " +
                     std::to_string(count) + " elements from index " + std::to_string(start_index) +
@@ -60,15 +60,14 @@ struct DefaultBindings<std::vector<T>> {
             std::vector<T> ret;
             ret.splice(ret.begin(), ret, begin, end);
             return ret;
-        })*/
+        })*//*
         .Function("toString", [](std::vector<T> &v) {
             return std::string("[native vector of ") + std::to_string(v.size()) + " " + TypeInfo::Get<T>().GetName() + "]";
         })
         .AutoWrap()
-        .PointerAutoWrap()
         ;
     }
-};
+};*/
 
 }
 

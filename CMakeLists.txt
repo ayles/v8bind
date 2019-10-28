@@ -14,7 +14,7 @@ set(V8BIND_HEADERS
         src/v8bind/v8bind.hpp
         src/v8bind/module.hpp
         src/v8bind/property.hpp
-        src/v8bind/argument_traits.hpp)
+        src/v8bind/argument_traits.hpp src/v8bind/exception.hpp)
 
 set(V8BIND_SOURCES
         src/v8bind/stub.cpp)

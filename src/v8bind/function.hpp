@@ -154,7 +154,7 @@ v8::Local<v8::Value> CallV8FromNative(v8::Isolate *isolate,
         v8::Local<v8::Value> f, v8::Local<v8::Value> recv, Args&&... args) {
     v8::EscapableHandleScope scope(isolate);
 
-    if (f.IsEmpty() || !f->IsFunction()) throw std::runtime_error("F is not a function");
+    if (f.IsEmpty() || !f->IsFunction()) throw V8BindException("F is not a function");
     auto ff = f.As<v8::Function>();
 
     std::vector<v8::Local<v8::Value>> converted_args { ToV8(isolate, std::forward<Args>(args))... };
@@ -183,14 +183,14 @@ decltype(auto) CallNativeFromV8(F &&f, const v8::FunctionCallbackInfo<v8::Value>
     using Arguments = typename traits::function_traits<F>::arguments;
 
     if constexpr (std::is_same_v<CallType, StaticCall>) {
-        if (!traits::argument_traits<Arguments>::is_match(info)) {
-            throw std::runtime_error("Arguments don't match");
+        if (!traits::ArgumentTraits<Arguments>::IsMatch(info)) {
+            throw CallException("Arguments don't match");
         }
         using Indices = std::make_index_sequence<std::tuple_size_v<Arguments>>;
         return impl::CallNativeFromV8Impl<CallType, wrap_return_value>(std::forward<F>(f), info, Indices {});
     } else if (std::is_same_v<CallType, MemberCall>) {
-        if (!traits::argument_traits<traits::tuple_tail_t<Arguments>>::is_match(info)) {
-            throw std::runtime_error("Arguments don't match");
+        if (!traits::ArgumentTraits<traits::tuple_tail_t<Arguments>>::IsMatch(info)) {
+            throw CallException("Arguments don't match");
         }
         using Indices = std::make_index_sequence<std::tuple_size_v<Arguments> - 1>;
         return impl::CallNativeFromV8Impl<CallType, wrap_return_value>(std::forward<F>(f), info, Indices {});
@@ -206,11 +206,11 @@ void SelectAndCall(
     if constexpr (index < std::tuple_size_v<std::tuple<FS...>>) {
         try {
             CallNativeFromV8<CallType>(std::get<index>(functions), info);
-        } catch (const std::exception &) {
+        } catch (const CallException &e) {
             SelectAndCall<CallType, index + 1>(info, functions);
         }
     } else {
-        throw std::runtime_error("No suitable function found to call");
+        throw CallException("No suitable function found to call");
     }
 }
 
@@ -231,7 +231,7 @@ v8::Local<v8::FunctionTemplate> WrapFunction(v8::Isolate *isolate, F&&... f) {
         try {
             auto &extracted_functions = ExternalData::Unwrap<decltype(functions)>(info.Data());
             SelectAndCall<CallType>(info, extracted_functions);
-        } catch (const std::exception &e) {
+        } catch (const V8BindException &e) {
             info.GetIsolate()->ThrowException(v8::Exception::Error(ToV8(info.GetIsolate(), e.what())));
         }
     }, ExternalData::New(isolate, std::move(functions))));
@@ -244,11 +244,11 @@ decltype(auto) SelectAndCallConstructor(
     if constexpr (index < std::tuple_size_v<std::tuple<FS...>>) {
         try {
             return CallNativeFromV8<StaticCall, false>(std::get<index>(constructors), args);
-        } catch (const std::exception &e) {
+        } catch (const CallException &e) {
             return SelectAndCallConstructor<index + 1>(args, constructors);
         }
     } else {
-        throw std::runtime_error("No suitable constructor found to call");
+        throw CallException("No suitable constructor found to call");
     }
 }
 
@@ -264,7 +264,7 @@ void WrapConstructor(v8::Isolate *isolate, F&&... f, v8::Local<v8::FunctionTempl
             auto &extracted_constructors = ExternalData::Unwrap<decltype(constructors)>(args.Data());
             auto o = SelectAndCallConstructor(args, extracted_constructors);
             args.GetReturnValue().Set(Class<std::remove_pointer_t<decltype(o)>>::WrapObject(args.GetIsolate(), o, true));
-        } catch (const std::exception &e) {
+        } catch (const V8BindException &e) {
             args.GetIsolate()->ThrowException(v8::Exception::Error(ToV8(args.GetIsolate(), e.what())));
         }
     }, ExternalData::New(isolate, std::move(constructors)));
@@ -283,8 +283,8 @@ T *CallConstructorImpl(const v8::FunctionCallbackInfo<v8::Value> &info,
 
 template<typename T, typename AS>
 T *CallConstructor(const v8::FunctionCallbackInfo<v8::Value> &args) {
-    if (!traits::argument_traits<AS>::is_match(args)) {
-        throw std::runtime_error("No suitable constructor found");
+    if (!traits::ArgumentTraits<AS>::IsMatch(args)) {
+        throw CallException("No suitable constructor found");
     }
     using indices = std::make_index_sequence<std::tuple_size_v<AS>>;
     return impl::CallConstructorImpl<T, AS>(args, indices {});
@@ -294,7 +294,7 @@ template<typename T, typename AS1, typename AS2, typename ...Args>
 T *CallConstructor(const v8::FunctionCallbackInfo<v8::Value> &args) {
     try {
         return CallConstructor<T, AS1>(args);
-    } catch (const std::exception &) {}
+    } catch (const CallException &) {}
     return CallConstructor<T, AS2, Args...>(args);
 }
 

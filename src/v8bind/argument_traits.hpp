@@ -13,80 +13,80 @@
 
 namespace v8b::traits {
 
-struct non_strict {};
+struct NonStrict {};
 
 template<typename T, typename Enable = void>
-struct argument_traits;
+struct ArgumentTraits;
 
 template<>
-struct argument_traits<std::tuple<>, non_strict> {
+struct ArgumentTraits<std::tuple<>, NonStrict> {
     template<typename R>
-    static bool is_match(const v8::FunctionCallbackInfo<R> &info) {
+    static inline bool IsMatch(const v8::FunctionCallbackInfo<R> &info) {
         return true;
     }
 };
 
 template<>
-struct argument_traits<std::tuple<>> {
+struct ArgumentTraits<std::tuple<>> {
     template<typename R>
-    static bool is_match(const v8::FunctionCallbackInfo<R> &info) {
+    static inline bool IsMatch(const v8::FunctionCallbackInfo<R> &info) {
         return info.Length() == 0;
     }
 };
 
 // Allow bind functions with native v8 signature
 template<typename IR>
-struct argument_traits<std::tuple<const v8::FunctionCallbackInfo<IR> &>, non_strict> {
+struct ArgumentTraits<std::tuple<const v8::FunctionCallbackInfo<IR> &>, NonStrict> {
     template<typename R>
-    static bool is_match(const v8::FunctionCallbackInfo<R> &info) {
+    static inline bool IsMatch(const v8::FunctionCallbackInfo<R> &info) {
         return std::is_same_v<IR, R>;
     }
 };
 
 template<typename IR>
-struct argument_traits<std::tuple<const v8::FunctionCallbackInfo<IR> &>> {
+struct ArgumentTraits<std::tuple<const v8::FunctionCallbackInfo<IR> &>> {
     template<typename R>
-    static bool is_match(const v8::FunctionCallbackInfo<R> &info) {
+    static inline bool IsMatch(const v8::FunctionCallbackInfo<R> &info) {
         return std::is_same_v<IR, R>;
     }
 };
 
 template<typename A>
-struct argument_traits<std::tuple<A>, non_strict> {
-template<typename R>
-static bool is_match(const v8::FunctionCallbackInfo<R> &info, int offset = 0) {
-    return Convert<std::decay_t<A>>::IsValid(info.GetIsolate(), info[offset]);
-}
+struct ArgumentTraits<std::tuple<A>, NonStrict> {
+    template<typename R>
+    static inline bool IsMatch(const v8::FunctionCallbackInfo<R> &info, int offset = 0) {
+        return Convert<std::decay_t<A>>::IsValid(info.GetIsolate(), info[offset]);
+    }
 };
 
 template<typename A>
-struct argument_traits<std::tuple<A>> {
-template<typename R>
-static bool is_match(const v8::FunctionCallbackInfo<R> &info) {
-    return info.Length() == 1 && argument_traits<std::tuple<A>, non_strict>::is_match(info);
-}
+struct ArgumentTraits<std::tuple<A>> {
+    template<typename R>
+    static inline bool IsMatch(const v8::FunctionCallbackInfo<R> &info) {
+        return info.Length() == 1 && ArgumentTraits<std::tuple<A>, NonStrict>::IsMatch(info);
+    }
 };
 
 template<typename A1, typename A2, typename ...A>
-struct argument_traits<std::tuple<A1, A2, A...>, non_strict> {
-template<typename R>
-static bool is_match(const v8::FunctionCallbackInfo<R> &info, int offset = 0) {
-    return argument_traits<std::tuple<A1>, non_strict>::is_match(info, offset) &&
-                                           argument_traits<std::tuple<A2, A...>, non_strict>::is_match(info, offset + 1);
-}
+struct ArgumentTraits<std::tuple<A1, A2, A...>, NonStrict> {
+    template<typename R>
+    static inline bool IsMatch(const v8::FunctionCallbackInfo<R> &info, int offset = 0) {
+        return ArgumentTraits<std::tuple<A1>, NonStrict>::IsMatch(info, offset) &&
+            ArgumentTraits<std::tuple<A2, A...>, NonStrict>::IsMatch(info, offset + 1);
+    }
 };
 
 template<typename A1, typename A2, typename ...A>
-struct argument_traits<std::tuple<A1, A2, A...>> {
-template<typename R>
-static bool is_match(const v8::FunctionCallbackInfo<R> &info) {
-    return std::tuple_size_v<std::tuple<A1, A2, A...>> == info.Length() &&
-                                                          argument_traits<std::tuple<A1, A2, A...>, non_strict>::is_match(info);
-}
+struct ArgumentTraits<std::tuple<A1, A2, A...>> {
+    template<typename R>
+    static inline bool IsMatch(const v8::FunctionCallbackInfo<R> &info) {
+        return std::tuple_size_v<std::tuple<A1, A2, A...>> == info.Length() &&
+            ArgumentTraits<std::tuple<A1, A2, A...>, NonStrict>::IsMatch(info);
+    }
 };
 
 template<typename T>
-using non_strict_argument_traits = argument_traits<T, non_strict>;
+using NonStrictArgumentTraits = ArgumentTraits<T, NonStrict>;
 
 } //namespace v8b::traits
 

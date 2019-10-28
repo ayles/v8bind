@@ -7,6 +7,7 @@
 
 #include <v8bind/class.hpp>
 #include <v8bind/traits.hpp>
+#include <v8bind/exception.hpp>
 
 #include <v8.h>
 
@@ -18,6 +19,7 @@
 #include <memory>
 #include <locale>
 #include <codecvt>
+#include <map>
 
 namespace v8b {
 
@@ -35,7 +37,7 @@ struct Convert<v8::Local<T>> {
 
     static CType FromV8(v8::Isolate *isolate, v8::Local<v8::Value> value) {
         if (!IsValid(isolate, value)) {
-            throw std::runtime_error("Value is not of type");
+            throw V8BindException("Value is not of type");
         }
         return value.As<T>();
     }
@@ -56,7 +58,7 @@ struct Convert<bool> {
 
     static CType FromV8(v8::Isolate *isolate, v8::Local<v8::Value> value) {
         if (!IsValid(isolate, value)) {
-            throw std::runtime_error("Value is not a valid bool");
+            throw V8BindException("Value is not a valid bool");
         }
         return value.As<v8::Boolean>()->Value();
     }
@@ -77,7 +79,7 @@ struct Convert<T, std::enable_if_t<std::is_floating_point_v<T> || std::is_integr
 
     static CType FromV8(v8::Isolate *isolate, v8::Local<v8::Value> value) {
         if (!IsValid(isolate, value)) {
-            throw std::runtime_error("Value is not a valid number");
+            throw V8BindException("Value is not a valid number");
         }
         return static_cast<T>(value.As<v8::Number>()->Value());
     }
@@ -98,7 +100,7 @@ struct Convert<T, std::enable_if_t<std::is_enum_v<T>>> {
 
     static CType FromV8(v8::Isolate *isolate, v8::Local<v8::Value> value) {
         if (!IsValid(isolate, value)) {
-            throw std::runtime_error("Value is not a valid number");
+            throw V8BindException("Value is not a valid number");
         }
         return static_cast<T>(std::underlying_type_t<T>(value.As<v8::Number>()->Value()));
     }
@@ -122,7 +124,7 @@ struct Convert<std::basic_string<Char, Traits, Alloc>> {
 
     static CType FromV8(v8::Isolate* isolate, v8::Local<v8::Value> value) {
         if (!IsValid(isolate, value)) {
-            throw std::runtime_error("Value is not a valid string");
+            throw V8BindException("Value is not a valid string");
         }
         if constexpr (sizeof(Char) == 1) {
             const v8::String::Utf8Value str(isolate, value);
@@ -165,6 +167,86 @@ struct Convert<std::basic_string<Char, Traits, Alloc>> {
     }
 };
 
+
+template<typename Key, typename T, typename Comp, typename Alloc>
+struct Convert<std::map<Key, T, Comp, Alloc>> {
+    using CType = std::map<Key, T, Comp, Alloc>;
+    using V8Type = v8::Local<v8::Object>;
+
+    static bool IsValid(v8::Isolate *, v8::Local<v8::Value> value) {
+        return !value.IsEmpty() && value->IsObject();
+    }
+
+    static CType FromV8(v8::Isolate *isolate, v8::Local<v8::Value> value) {
+        if (!IsValid(isolate, value)) {
+            throw V8BindException("Value is not an object");
+        }
+
+        v8::HandleScope scope(isolate);
+        v8::Local<v8::Context> context = isolate->GetCurrentContext();
+        v8::Local<v8::Object> object = value.As<v8::Object>();
+        v8::Local<v8::Array> prop_names = object->GetPropertyNames(context).ToLocalChecked();
+
+        CType result;
+        for (uint32_t i = 0, count = prop_names->Length(); i < count; ++i) {
+            v8::Local<v8::Value> key = prop_names->Get(context, i).ToLocalChecked();
+            v8::Local<v8::Value> val = object->Get(context, key).ToLocalChecked();
+            result.emplace(Convert<Key>::FromV8(isolate, key),
+                           Convert<T>::FromV8(isolate, val));
+        }
+        return result;
+    }
+
+    static V8Type ToV8(v8::Isolate *isolate, const CType &value) {
+        v8::EscapableHandleScope scope(isolate);
+        v8::Local<v8::Context> context = isolate->GetCurrentContext();
+        v8::Local<v8::Object> result = v8::Object::New(isolate);
+        for (const auto &p : value) {
+            result->Set(context,
+                        Convert<Key>::ToV8(isolate, p.first),
+                        Convert<T>::ToV8(isolate, p.second));
+        }
+        return scope.Escape(result);
+    }
+};
+
+template<typename T, typename Alloc>
+struct Convert<std::vector<T, Alloc>> {
+    using CType = std::vector<T, Alloc>;
+    using V8Type = v8::Local<v8::Object>;
+
+    static bool IsValid(v8::Isolate *, v8::Local<v8::Value> value) {
+        return !value.IsEmpty() && value->IsArray();
+    }
+
+    static CType FromV8(v8::Isolate *isolate, v8::Local<v8::Value> value) {
+        if (!IsValid(isolate, value)) {
+            throw V8BindException("Value is not an array");
+        }
+
+        v8::HandleScope scope(isolate);
+        v8::Local<v8::Context> context = isolate->GetCurrentContext();
+        v8::Local<v8::Array> array = value.As<v8::Array>();
+
+        CType result;
+        result.reserve(array->Length());
+        for (uint32_t i = 0, count = array->Length(); i < count; ++i) {
+            result.emplace_back(Convert<T>::FromV8(isolate, array->Get(context, i).ToLocalChecked()));
+        }
+        return result;
+    }
+
+    static V8Type ToV8(v8::Isolate *isolate, const CType &value) {
+        v8::EscapableHandleScope scope(isolate);
+        v8::Local<v8::Context> context = isolate->GetCurrentContext();
+        v8::Local<v8::Array> result = v8::Array::New(isolate, (uint32_t)value.size());
+        for (uint32_t i = 0; i < (uint32_t)value.size(); ++i) {
+            result->Set(context, i, Convert<T>::ToV8(isolate, value[i]));
+        }
+        return scope.Escape(result);
+    }
+};
+
 template<>
 struct Convert<const char *> : Convert<std::string> {};
 
@@ -183,11 +265,14 @@ struct IsWrappedClass<v8::Local<T>> : std::false_type {};
 template<typename T>
 struct IsWrappedClass<v8::Global<T>> : std::false_type {};
 
-template<typename Char, typename Traits>
-struct IsWrappedClass<std::basic_string_view<Char, Traits>> : std::false_type {};
-
 template<typename Char, typename Traits, typename Alloc>
 struct IsWrappedClass<std::basic_string<Char, Traits, Alloc>> : std::false_type {};
+
+template<typename Key, typename T, typename Comp, typename Alloc>
+struct IsWrappedClass<std::map<Key, T, Comp, Alloc>> : std::false_type {};
+
+template<typename T, typename Alloc>
+struct IsWrappedClass<std::vector<T, Alloc>> : std::false_type {};
 
 template<typename T>
 struct IsWrappedClass<std::shared_ptr<T>> : std::false_type {};
@@ -204,20 +289,7 @@ struct Convert<T *, typename std::enable_if_t<IsWrappedClass<T>::value>> {
         }
         try {
             Class<std::remove_cv_t<T>>::UnwrapObject(isolate, value);
-        } catch (const std::exception &) {
-            // JS array converting
-            if constexpr (traits::is_vector_v<std::remove_cv_t<T>>) {
-                if (value->IsArray()) {
-                    auto obj = value.As<v8::Array>();
-                    auto context = isolate->GetCurrentContext();
-                    T *vec = new T;
-                    for (unsigned int i = 0; i < obj->Length(); ++i) {
-                        vec->emplace_back(Convert<typename T::value_type>::FromV8(isolate, (obj->Get(context, i).ToLocalChecked())));
-                    }
-                    obj->SetPrototype(context, Class<std::remove_cv_t<T>>::WrapObject(isolate, vec, true));
-                    return true;
-                }
-            }
+        } catch (const V8BindException &) {
             return false;
         }
         return true;
@@ -225,7 +297,7 @@ struct Convert<T *, typename std::enable_if_t<IsWrappedClass<T>::value>> {
 
     static CType FromV8(v8::Isolate *isolate, v8::Local<v8::Value> value) {
         if (!IsValid(isolate, value)) {
-            throw std::runtime_error("Value is not a valid object");
+            throw V8BindException("Value is not a valid object");
         }
         return Class<std::remove_cv_t<T>>::UnwrapObject(isolate, value);
     }
@@ -247,15 +319,15 @@ struct Convert<T, typename std::enable_if_t<IsWrappedClass<T>::value>> {
     static CType FromV8(v8::Isolate *isolate, v8::Local<v8::Value> value) {
         auto ptr = Convert<T *>::FromV8(isolate, value);
         if (!ptr) {
-            throw std::runtime_error("Failed to unwrap object");
+            throw V8BindException("Failed to unwrap object");
         }
         return *ptr;
     }
 
     static V8Type ToV8(v8::Isolate *isolate, const T &value) {
-        auto wrapped = Class<std::remove_cv_t<T>>::FindObject(isolate, value);
+        auto wrapped = Class<std::remove_cv_t<T>>::FindObject(isolate, const_cast<T *>(&value));
         if (wrapped.IsEmpty()) {
-            throw std::runtime_error("Failed to wrap object");
+            throw V8BindException("Failed to wrap object");
         }
         return wrapped;
     }
@@ -272,7 +344,7 @@ struct Convert<std::shared_ptr<T>, typename std::enable_if_t<IsWrappedClass<T>::
 
     static CType FromV8(v8::Isolate *isolate, v8::Local<v8::Value> value) {
         if (!IsValid(isolate, value)) {
-            throw std::runtime_error("Value is not a valid object");
+            throw V8BindException("Value is not a valid object");
         }
         return SharedPointerManager<std::remove_cv_t<T>>::UnwrapObject(isolate, value);
     }
